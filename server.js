@@ -217,7 +217,8 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
       if (!file) return json(404, { error: 'Not found.' });
       res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
       res.setHeader('Content-Type', file.endsWith('.css') ? 'text/css; charset=utf-8' : file.endsWith('.svg') ? 'image/svg+xml' : file.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8');
-      return fs.createReadStream(path.join(__dirname, file)).pipe(res);
+      // A missing file must not crash the server.
+      return fs.createReadStream(path.join(__dirname, file)).on('error', () => { if (!res.headersSent) { res.statusCode = 404; res.setHeader('Content-Type', 'text/plain; charset=utf-8'); } res.end('Not found.'); }).pipe(res);
     }
     try {
       if (!['GET', 'POST'].includes(req.method)) fail(405, 'Method not allowed.');
