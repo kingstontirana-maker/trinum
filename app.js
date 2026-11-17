@@ -245,7 +245,9 @@ function refreshChat() {
   const p = getPeer(active), ready = p.channel?.readyState === 'open';
   fillAvatar($('chatAvatar'), friend); $('chatName').textContent = friend.name;
   $('chatStatus').textContent = ready ? 'Online · encrypted connection' : friend.online ? '@' + friend.username + ' · Online' : '@' + friend.username + ' · Offline';
-  $('chatStatus').classList.toggle('connected', ready); $('message').disabled = !ready; $('send').disabled = !ready || !$('message').value.trim();
+  $('chatStatus').classList.toggle('connected', ready); $('message').disabled = false; $('send').disabled = !ready || !$('message').value.trim();
+  // The field stays usable; only sending waits for the live connection.
+  $('message').placeholder = ready ? 'Message securely…' : !friend.online ? friend.name.split(' ')[0] + ' is offline · write now, send when you are both online' : 'Connecting… you can start typing';
   $('sessionBadge').classList.toggle('connected', ready);
   $('recordVoice').disabled = !ready || voiceBusy || !!voice.recording;
   $('sendVoice').disabled = !ready || voiceBusy;
@@ -335,7 +337,8 @@ $('sendVoice').onclick = run(async () => { if (voiceBusy || !voice.draft) return
 $('message').oninput = () => { resizeComposer(); refreshChat(); const p = peers.get(active); if (p?.channel?.readyState === 'open' && Date.now() - lastTyping > 1300) { lastTyping = Date.now(); try { p.channel.send(JSON.stringify({ type: 'typing', value: !!$('message').value })); } catch {} } };
 $('message').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && window.matchMedia('(pointer:fine)').matches) { e.preventDefault(); $('composer').requestSubmit(); } };
 $('composer').onsubmit = e => {
-  e.preventDefault(); const p = peers.get(active), text = $('message').value.trim(); if (!text || p?.channel?.readyState !== 'open') return;
+  e.preventDefault(); const p = peers.get(active), text = $('message').value.trim(); if (!text) return;
+  if (p?.channel?.readyState !== 'open') { const friend = account?.friends.find(f => f.id === active); return toast(friend && !friend.online ? friend.name + ' is offline. Your message stays here until you are both online.' : 'Still connecting. Send again in a moment.'); }
   if (p.channel.bufferedAmount > 1000000) return toast('The connection is busy. Try again shortly.');
   try { p.channel.send(JSON.stringify({ type: 'message', text })); addMessage(active, text, true); $('message').value = ''; drafts.delete(active); resizeComposer(); refreshChat(); }
   catch { toast('Message could not be sent. Please try again.'); }

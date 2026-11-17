@@ -67,9 +67,13 @@ async function main() {
       assert.ok(await evaluate(alice, `document.querySelector('.list-content').getBoundingClientRect().height > 120`), 'Scrollable friends list at ' + width);
     }
     await size(alice, 390); await click(alice, '#listContent .person-row');
-    await wait(alice, `!document.getElementById('message').disabled`, 'encrypted data channel');
+    await wait(alice, `document.getElementById('chatStatus').classList.contains('connected')`, 'encrypted data channel');
     await click(bob, '.mobile-nav [data-view="chats"]'); await click(bob, '#listContent .person-row');
-    await wait(bob, `!document.getElementById('message').disabled`, 'recipient encrypted data channel');
+    await wait(bob, `document.getElementById('chatStatus').classList.contains('connected')`, 'recipient encrypted data channel');
+    // The composer must be the topmost element at its own centre, so taps reach it.
+    const composerHit = page => evaluate(page, `(()=>{const m=document.getElementById('message'),r=m.getBoundingClientRect(),e=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return e===m?'ok':(e?e.tagName+'#'+e.id+'.'+e.className:'none')+' '+JSON.stringify(r)})()`);
+    for (const width of [390, 1440]) { await size(alice, width, width > 620 ? 1000 : 844); await delay(150); assert.equal(await composerHit(alice), 'ok', 'Message field is clickable at ' + width); }
+    await size(alice, 390);
     await evaluate(alice, `document.getElementById('message').value='Hey! Just between us.';document.getElementById('message').dispatchEvent(new Event('input'));document.getElementById('composer').requestSubmit();`);
     await wait(bob, `document.getElementById('messages').textContent.includes('Hey! Just between us.')`, 'message delivered');
     await evaluate(bob, `document.getElementById('message').value='Always. Welcome to Trinum ✨';document.getElementById('message').dispatchEvent(new Event('input'));document.getElementById('composer').requestSubmit();`);
