@@ -42,3 +42,7 @@
 .admin-nav{margin-top:auto;width:100%;margin-bottom:14px;color:#e9c97a}.admin-nav:hover{color:#ffe2a0}
 .admin-nav:not([hidden])+.my-avatar{margin-top:0}
 @media (max-width:620px){.paywall{padding-top:70px}.paywall-card{padding:28px 20px}.paywall-card h2{font-size:24px}}
+/* Date divider sits directly under the contact name. */
+.chat-view .chat-header{min-height:0;padding-bottom:2px}
+.chat-view .message-scroll{padding-top:0}
+.chat-view .chat-start .date-chip{padding:2px 0 12px}

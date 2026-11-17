@@ -31,3 +31,19 @@ test('voice receiver rejects oversized, unsafe, incomplete and mismatched audio 
   v.receive('p', start); v.receive('p', { type: 'voice-cancel', id: 'test' }); assert.equal(v.pending.size, 0);
   v.close(); assert.equal(accepted, 0);
 });
+test('voice accepts Firefox and Safari audio types and reports rejected transfers to the sender', () => {
+  const sent = [], notices = [];
+  const v = new Voice({ channel: () => ({ readyState: 'open', send: raw => sent.push(JSON.parse(raw)) }), received: () => {}, notice: text => notices.push(text) });
+  for (const mime of ['audio/ogg; codecs=opus', 'audio/webm; codecs="opus"', 'audio/mp4; codecs=mp4a.40.2', 'audio/x-m4a', 'audio/aac']) {
+    v.receive('p', { type: 'voice-start', id: 'm', size: 3, mime, duration: 1 }); assert.equal(v.pending.size, 1, mime); v.drop('p');
+  }
+  for (const mime of ['image/svg+xml', 'text/html', 'audio/mp4<script>', 'audio/' + 'x'.repeat(200)]) {
+    v.receive('p', { type: 'voice-start', id: 'bad', size: 3, mime, duration: 1 }); assert.equal(v.pending.size, 0, mime);
+  }
+  assert.ok(sent.every(m => m.type === 'voice-rejected' && m.id === 'bad')); assert.equal(sent.length, 4);
+  v.receive('p', { type: 'voice-start', id: 'a', size: 3, mime: 'audio/mp4', duration: 1 });
+  v.receive('p', { type: 'voice-start', id: 'b', size: 3, mime: 'audio/mp4', duration: 1 });
+  assert.equal(v.pending.get('p').id, 'b', 'a stuck transfer does not block the next one');
+  v.receive('p', { type: 'voice-rejected', id: 'x' }); assert.equal(notices.length, 1);
+  v.close();
+});

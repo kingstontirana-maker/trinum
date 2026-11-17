@@ -302,7 +302,7 @@ function bindChannel(p, channel, pc) {
 }
 function drawMessage(m) {
   const row = node('div', 'bubble-row' + (m.own ? ' own' : '')), bubble = node('div', 'bubble', m.voice ? '' : m.text), time = node('time', '', new Date(m.time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
-  if (m.voice) { bubble.classList.add('voice-bubble'); bubble.append(node('div', 'voice-label', 'Voice message · ' + Math.round(m.voice.duration) + 's')); const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'metadata'; audio.src = m.voice.url; audio.setAttribute('aria-label', 'Voice message'); bubble.append(audio); }
+  if (m.voice) { bubble.classList.add('voice-bubble'); bubble.append(node('div', 'voice-label', 'Voice message · ' + Math.round(m.voice.duration) + 's')); const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'metadata'; audio.src = m.voice.url; audio.setAttribute('aria-label', 'Voice message'); audio.onerror = () => { bubble.querySelector('.voice-label').textContent = 'Voice message · this browser cannot play this format'; }; bubble.append(audio); }
   time.dateTime = new Date(m.time).toISOString(); if (m.own) { time.append(icon('check')); const lock = icon('lock'); lock.classList.add('message-lock'); time.append(lock); }
   if (!m.own) { const friend = account?.friends.find(p => p.id === active); if (friend) { const a = avatar(friend); a.classList.add('message-avatar'); a.classList.remove('online'); row.append(a); } }
   bubble.append(time); row.append(bubble); $('messages').append(row);
@@ -342,7 +342,6 @@ $('composer').onsubmit = e => {
 };
 for (const id of ['profileButton', 'mobileProfile']) $(id).onclick = () => $('profileDialog').showModal();
 $('chatInfo').onclick = () => $('privacyDialog').showModal();
-$('learnPrivacy').onclick = () => $('privacyDialog').showModal();
 $('chatSearch').onclick = () => showView('discover', { focus: true });
 $('chatSettings').onclick = () => $('profileDialog').showModal();
 $('uploadAvatar').onclick = () => $('avatarFile').click();
