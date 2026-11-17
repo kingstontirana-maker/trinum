@@ -1,0 +1,6 @@
+.git
+.data
+.artifacts
+node_modules
+*.test.js
+scripts
