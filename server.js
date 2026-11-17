@@ -246,5 +246,5 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
   sweepExpiredAccounts().catch(() => {});
   server.on('close', () => { closing = true; clearInterval(cleanup); clearTimeout(expiryTimer); }); return server;
 }
-if (require.main === module) createTrinumServer().listen(process.env.PORT || 3000, () => console.log('Trinum: http://localhost:' + (process.env.PORT || 3000)));
+if (require.main === module) createTrinumServer(process.env.DATA_DIR ? { dataFile: path.join(process.env.DATA_DIR, 'accounts.json') } : {}).listen(process.env.PORT || 3000, () => console.log('Trinum: http://localhost:' + (process.env.PORT || 3000)));
 module.exports = { createTrinumServer };

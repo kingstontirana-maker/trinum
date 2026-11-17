@@ -53,3 +53,7 @@ npm run test:browser
 ```
 
 The browser check uses an existing local Chromium installation with no testing dependencies. Set `CHROME_PATH` to its executable if needed. It creates temporary accounts outside the app's real data directory, tests two independent browser contexts and saves screenshots in `.artifacts/`. Covers registration/login, search, invitations, online friends, bidirectional WebRTC messages, mobile back navigation, reduced keyboard viewport, persistence and widths 320/360/390/430/768/1440. The server tests also cover rejected invitations and blocked unauthorized signaling.
+
+## Render
+
+`render.yaml` deploys the app as a Render web service (Blueprint). Render provides HTTPS, sets `PORT`, and `COOKIE_SECURE=1` is preset. On the free plan the filesystem is ephemeral and the service sleeps when idle: accounts in `.data/accounts.json` are lost on every restart or redeploy. For persistent accounts, use a paid instance with a persistent disk and set `DATA_DIR` to the disk's mount path (e.g. `/var/data`).
