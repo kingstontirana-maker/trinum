@@ -246,8 +246,6 @@ function refreshChat() {
   fillAvatar($('chatAvatar'), friend); $('chatName').textContent = friend.name;
   $('chatStatus').textContent = ready ? 'Online · encrypted connection' : friend.online ? '@' + friend.username + ' · Online' : '@' + friend.username + ' · Offline';
   $('chatStatus').classList.toggle('connected', ready); $('message').disabled = false; $('send').disabled = !ready || !$('message').value.trim();
-  // The field stays usable; only sending waits for the live connection.
-  $('message').placeholder = ready ? 'Message securely…' : !friend.online ? friend.name.split(' ')[0] + ' is offline · write now, send when you are both online' : 'Connecting… you can start typing';
   $('sessionBadge').classList.toggle('connected', ready);
   $('recordVoice').disabled = !ready || voiceBusy || !!voice.recording;
   $('sendVoice').disabled = !ready || voiceBusy;
