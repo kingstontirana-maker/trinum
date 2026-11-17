@@ -243,17 +243,22 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
           const name = String(body.name || '').trim();
           if (name.length < 2 || name.length > 40) fail(400, 'Name must contain 2–40 characters.');
           if (!password) fail(400, 'Enter a password.');
-          const emergencyPassword = body.emergencyPassword;
-          if (typeof emergencyPassword !== 'string' || !emergencyPassword || emergencyPassword.length > MAX_PASSWORD) fail(400, 'Set an emergency password.');
-          if (emergencyPassword === password) fail(400, 'Use different normal and emergency passwords.');
-          if (emergencyPassword !== body.confirmEmergencyPassword || body.emergencyAcknowledge !== true) fail(400, 'Confirm your emergency password and acknowledge permanent deletion.');
+          // The emergency password is optional. When set it must differ from the normal one,
+          // otherwise every normal sign-in would lock the account.
+          const emergencyPassword = typeof body.emergencyPassword === 'string' ? body.emergencyPassword : '';
+          if (emergencyPassword.length > MAX_PASSWORD) fail(400, 'Emergency password is too long.');
+          if (emergencyPassword) {
+            if (emergencyPassword === password) fail(400, 'Use different normal and emergency passwords.');
+            if (emergencyPassword !== body.confirmEmergencyPassword) fail(400, 'Emergency passwords do not match.');
+            if (body.emergencyAcknowledge !== true) fail(400, 'Tick the box to confirm that emergency sign-in locks your account.');
+          }
           if (u) fail(409, 'This username is already taken.');
           if (store.users.length >= 10000) fail(503, 'Registration is temporarily closed.');
           const salt = crypto.randomBytes(16).toString('hex'), emergencySalt = crypto.randomBytes(16).toString('hex');
           const [normalKey, emergencyKey] = await Promise.all([scrypt(password, salt, 64), scrypt(emergencyPassword, emergencySalt, 64)]);
           const hash = normalKey.toString('hex'), emergencyHash = emergencyKey.toString('hex');
           if (store.users.some(x => x.username === username)) fail(409, 'This username is already taken.');
-          u = { id: crypto.randomBytes(12).toString('hex'), username, name, salt, hash, emergencySalt, emergencyHash, friends: [], role: 'user', createdAt: now() };
+          u = { id: crypto.randomBytes(12).toString('hex'), username, name, salt, hash, ...(emergencyPassword ? { emergencySalt, emergencyHash } : {}), friends: [], role: 'user', createdAt: now() };
           store.users.push(u);
           try { await persist(); } catch (e) { store.users = store.users.filter(x => x.id !== u.id); throw e; }
         } else {

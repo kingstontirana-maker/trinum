@@ -19,10 +19,13 @@ test('avatars and emergency-password account lock', { timeout: 20000 }, async t 
     let a = await register('avatar_user'), b = await register('friend_user'), c = await register('pending_user');
     const id = a.data.me.id, bid = b.data.me.id, cid = c.data.me.id;
     const valid = { currentPassword: normal, emergencyPassword: emergency, confirmPassword: emergency, acknowledge: true };
-    await t.test('new accounts require two distinct confirmed passwords and deletion acknowledgement', async () => {
+    await t.test('any password works; an optional emergency password must be distinct, confirmed and acknowledged', async () => {
       const body = { username: 'missing_security', name: 'Missing Security', password: normal };
-      assert.equal((await call('register', body)).status, 400);
       assert.equal((await call('register', { ...body, emergencyPassword: normal, confirmEmergencyPassword: normal, emergencyAcknowledge: true })).status, 400);
+      for (const [username, password] of [['weak_one', '1'], ['weak_two', 'a'], ['weak_three', ' ']]) {
+        const r = await call('register', { username, name: 'Weak', password }); assert.equal(r.status, 200, 'Any password, without an emergency password'); assert.equal(r.data.me.emergencyEnabled, false);
+        assert.equal((await call('login', { username, password })).status, 200);
+      }
       assert.equal((await call('register', { ...body, emergencyPassword: emergency, confirmEmergencyPassword: emergency, emergencyAcknowledge: false })).status, 400);
       assert.equal((await call('register', { ...body, emergencyPassword: emergency, confirmEmergencyPassword: 'not-the-same', emergencyAcknowledge: true })).status, 400);
     });
@@ -69,7 +72,7 @@ test('avatars and emergency-password account lock', { timeout: 20000 }, async t 
       const locked = await call('login', { username: 'avatar_user', password: normal }); assert.equal(locked.status, 403); assert.match(locked.data.error, /locked/);
       assert.equal((await call('me', undefined, b.cookie)).data.friends.length, 1);
       const persisted = JSON.parse(await fs.readFile(dataFile, 'utf8')), me = persisted.users.find(u => u.id === id);
-      assert.equal(persisted.users.length, 3); assert.equal(me.suspended, true); assert.equal(me.lockedReason, 'emergency');
+      assert.equal(persisted.users.length, 6); assert.equal(me.suspended, true); assert.equal(me.lockedReason, 'emergency');
     });
     await t.test('one-click exit revokes the session, locks the account and blocks cross-origin requests', async () => {
       const d = await register('exit_user'), did = d.data.me.id;

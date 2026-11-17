@@ -40,7 +40,7 @@ function setAuthMode(mode) {
   authMode = mode; const register = mode === 'register';
   $('nameField').hidden = !register; $('fullName').required = register; $('passwordHint').hidden = !register;
   $('registerEmergencyFields').hidden = !register;
-  for (const id of ['registerEmergency', 'registerEmergencyConfirm', 'registerEmergencyAck']) $(id).required = register;
+  for (const id of ['registerEmergency', 'registerEmergencyConfirm', 'registerEmergencyAck']) $(id).required = false;
   $('password').minLength = 1; $('password').autocomplete = register ? 'new-password' : 'current-password';
   for (const [id, selected] of [['loginTab', !register], ['registerTab', register]]) { $(id).classList.toggle('active', selected); $(id).setAttribute('aria-selected', selected); }
   $('authTitle').textContent = register ? 'Your circle starts here.' : 'Your private space.';

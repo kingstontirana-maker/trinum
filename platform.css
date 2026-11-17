@@ -80,3 +80,4 @@ body.in-call .toast{z-index:40}
 /* Keep the Emergency exit bar visible above an active call. */
 .call-view{top:calc(42px + env(safe-area-inset-top));padding-top:28px}
 .local-video{top:16px}
+.optional-hint{font-size:.85em;color:var(--muted);font-weight:400;margin-left:4px;text-transform:none;letter-spacing:0}
