@@ -108,10 +108,23 @@ async function main() {
     assert.equal(await evaluate(alice, `document.getElementById('messages').textContent`), '', 'Refresh clears messages');
     await click(alice, '#mobileProfile'); await click(alice, '#logout');
     await wait(alice, `!document.getElementById('authPage').hidden`, 'logout returns to login');
+    // Offline delivery: Bob writes and records while Aria is signed out.
+    await wait(bob, `!document.getElementById('chatStatus').classList.contains('connected')`, 'direct channel closed after logout');
+    assert.ok(await evaluate(bob, `!document.getElementById('message').disabled`), 'Message field usable while friend is offline');
+    await evaluate(bob, `document.getElementById('message').value='Sent while you were away';document.getElementById('message').dispatchEvent(new Event('input'));document.getElementById('composer').requestSubmit();`);
+    await wait(bob, `document.getElementById('messages').textContent.includes('Sent while you were away')`, 'offline message shown to sender');
+    await click(bob, '#recordVoice'); await wait(bob, `voice.recording !== null`, 'offline recording'); await delay(1500); await click(bob, '#stopVoice');
+    await wait(bob, `!document.getElementById('sendVoice').hidden`, 'offline voice preview'); await click(bob, '#sendVoice');
+    await wait(bob, `document.getElementById('voicePanel').hidden && document.querySelectorAll('#messages audio').length === 2`, 'offline voice sent');
     await evaluate(alice, `document.getElementById('username').value=${JSON.stringify('aria_' + suffix)};document.getElementById('password').value='wrong-password';`);
     await click(alice, '#authSubmit'); await wait(alice, `!document.getElementById('authError').hidden`, 'invalid login error');
     await evaluate(alice, `document.getElementById('password').value=${JSON.stringify(password)};`); await click(alice, '#authSubmit');
     await wait(alice, `!document.getElementById('workspace').hidden`, 'password login');
+    await wait(alice, `document.getElementById('toastText').textContent === 'New message from Elio Deda'`, 'offline message delivered on sign-in');
+    await click(alice, '#listContent .person-row');
+    await wait(alice, `document.getElementById('messages').textContent.includes('Sent while you were away') && document.querySelector('#messages audio')?.readyState >= 1`, 'offline text and voice delivered');
+    await delay(500); assert.equal(JSON.parse(await fs.readFile(path.join(temp, 'mail.json'), 'utf8')).length, 0, 'Delivered messages removed from the server');
+    await click(alice, '#backToList');
     await click(alice, '#mobileProfile'); await click(alice, '#openSecurity');
     const emergency = 'temporary-emergency-789';
     await evaluate(alice, `document.getElementById('securityCurrent').value=${JSON.stringify(password)};document.getElementById('securityEmergency').value=${JSON.stringify(emergency)};document.getElementById('securityConfirm').value=${JSON.stringify(emergency)};document.getElementById('securityAcknowledge').checked=true;`);

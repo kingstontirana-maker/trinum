@@ -8,7 +8,7 @@ window.TrinumVoice = class TrinumVoice {
     this.clearDraft(); const generation = ++this.generation;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw Error('Voice recording requires HTTPS or localhost and a supported browser.');
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    if (generation !== this.generation || this.channel(peer)?.readyState !== 'open') { stream.getTracks().forEach(t => t.stop()); throw Error('Recording cancelled or connection closed.'); }
+    if (generation !== this.generation) { stream.getTracks().forEach(t => t.stop()); throw Error('Recording cancelled.'); }
     try {
       const mime = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(x => MediaRecorder.isTypeSupported(x));
       if (!mime) throw Error('No supported audio recorder was found in this browser.');
@@ -43,6 +43,17 @@ window.TrinumVoice = class TrinumVoice {
     } catch (e) { if (channel.readyState === 'open') try { channel.send(JSON.stringify({ type: 'voice-cancel', id })); } catch {} throw e; }
     const message = { text: 'Voice message', voice: { url: URL.createObjectURL(draft.blob), duration: draft.duration, size: draft.blob.size } };
     this.clearDraft(); return message;
+  }
+  // For delivery through the server when no direct channel is open.
+  async exportDraft(peer) {
+    const draft = this.draft; if (!draft || draft.peer !== peer) throw Error('Record a voice message first.');
+    const bytes = new Uint8Array(await draft.blob.arrayBuffer()); let binary = '';
+    for (let i = 0; i < bytes.length; i += 32768) binary += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    return { payload: { mime: draft.blob.type || 'audio/mp4', duration: draft.duration, data: btoa(binary) }, message: { text: 'Voice message', voice: { url: URL.createObjectURL(draft.blob), duration: draft.duration, size: draft.blob.size } } };
+  }
+  static fromPayload(v) {
+    const bytes = Uint8Array.from(atob(v.data), c => c.charCodeAt(0)), blob = new Blob([bytes], { type: v.mime });
+    return { text: 'Voice message', voice: { url: URL.createObjectURL(blob), duration: v.duration, size: bytes.length } };
   }
   drop(peer) { const r = this.pending.get(peer); if (r) clearTimeout(r.timer); this.pending.delete(peer); }
   receive(peer, message) {

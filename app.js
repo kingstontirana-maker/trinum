@@ -4,6 +4,8 @@ const svgNS = 'http://www.w3.org/2000/svg';
 let account = null, view = 'chats', active = null, authMode = 'login', events = null;
 let searchTimer, searchVersion = 0, onlineOnly = false, signalingReady = false, authBusy = false;
 let emergencyExiting = false;
+const seenMail = new Set(), pendingAcks = new Set(); let ackTimer;
+function flushAcks() { const ids = [...pendingAcks]; if (!ids.length) return; pendingAcks.clear(); api('ack', { ids }).catch(() => { for (const id of ids) pendingAcks.add(id); ackTimer = setTimeout(flushAcks, 3000); }); }
 const peers = new Map(), unread = new Map(), drafts = new Map();
 const voice = new TrinumVoice({ channel: id => peers.get(id)?.channel, received: (id, message) => addMessage(id, message, false), notice: text => toast(text) });
 let voiceBusy = false;
@@ -124,6 +126,16 @@ function startEvents() {
     p.signals = p.signals.then(() => handleSignal(p, data.signal)).catch(e => { p.status = 'Could not connect. Please try again.'; refreshChat(); });
   });
   stream.addEventListener('notice', e => toast(JSON.parse(e.data).text));
+  stream.addEventListener('mail', e => {
+    const m = JSON.parse(e.data);
+    if (!seenMail.has(m.id)) {
+      seenMail.add(m.id);
+      if (account?.friends.some(f => f.id === m.from)) {
+        try { addMessage(m.from, { ...(m.voice ? TrinumVoice.fromPayload(m.voice) : { text: String(m.text || '') }), time: m.at }, false); } catch {}
+      }
+    }
+    pendingAcks.add(m.id); clearTimeout(ackTimer); ackTimer = setTimeout(flushAcks, 150);
+  });
   stream.addEventListener('account-removed', e => {
     const id = JSON.parse(e.data).id, peer = peers.get(id);
     if (peer) { clearTimeout(peer.timeout); clearTimeout(peer.typingTimer); peer.pc?.close(); }
@@ -245,15 +257,14 @@ function refreshChat() {
   const p = getPeer(active), ready = p.channel?.readyState === 'open';
   fillAvatar($('chatAvatar'), friend); $('chatName').textContent = friend.name;
   $('chatStatus').textContent = ready ? 'Online · encrypted connection' : friend.online ? '@' + friend.username + ' · Online' : '@' + friend.username + ' · Offline';
-  $('chatStatus').classList.toggle('connected', ready); $('message').disabled = false; $('send').disabled = !ready || !$('message').value.trim();
+  $('chatStatus').classList.toggle('connected', ready); $('message').disabled = false; $('send').disabled = !$('message').value.trim();
   $('sessionBadge').classList.toggle('connected', ready);
-  $('recordVoice').disabled = !ready || voiceBusy || !!voice.recording;
-  $('sendVoice').disabled = !ready || voiceBusy;
-  if (!ready && voice.recording) clearVoice();
+  $('recordVoice').disabled = voiceBusy || !!voice.recording;
+  $('sendVoice').disabled = voiceBusy;
   $('sessionLabel').textContent = ready ? 'Encrypted · Secure session' : 'Private session';
   $('typing').hidden = !p.typing || !ready;
   const status = $('connectionStatus'); status.replaceChildren(); status.classList.toggle('ready', ready);
-  status.textContent = ready ? 'Messages stay in your open tabs.' : !friend.online ? 'Your friend is offline. Chat when you are both online.' : p.status || 'Establishing your private connection…';
+  status.textContent = ready ? 'Messages stay in your open tabs.' : !friend.online ? 'Offline · your messages are delivered when they open Trinum.' : p.status || 'Establishing your private connection…';
   if (!ready && friend.online && p.pc?.connectionState !== 'connecting' && p.pc?.connectionState !== 'new') { const b = node('button', 'retry-button', 'Reconnect'); b.onclick = run(async () => { p.status = ''; await connect(active, true); }); status.append(document.createTextNode(' '), b); }
 }
 async function connect(id, force = false) {
@@ -308,7 +319,7 @@ function drawMessage(m) {
   bubble.append(time); row.append(bubble); $('messages').append(row);
 }
 function addMessage(id, text, own) {
-  const p = getPeer(id), m = { ...(typeof text === 'string' ? { text } : text), own, time: Date.now() }; p.messages.push(m);
+  const p = getPeer(id), m = { ...(typeof text === 'string' ? { text } : text), own }; m.time = Number.isFinite(m.time) ? m.time : Date.now(); p.messages.push(m);
   let trimmed = false;
   while (p.messages.length > 500 || p.messages.reduce((sum, msg) => sum + (msg.voice?.size || 0), 0) > 16 * 1024 * 1024) { releaseMessage(p.messages.shift()); trimmed = true; }
   const visible = active === id && (!window.matchMedia('(max-width:620px)').matches || $('workspace').classList.contains('in-chat'));
@@ -331,12 +342,24 @@ $('recordVoice').onclick = async () => {
 };
 $('stopVoice').onclick = () => voice.stop();
 $('cancelVoice').onclick = () => { clearVoice(); refreshChat(); };
-$('sendVoice').onclick = run(async () => { if (voiceBusy || !voice.draft) return; const peer = active; voiceBusy = true; refreshChat(); try { const message = await voice.send(peer); addMessage(peer, message, true); clearVoice(); } finally { voiceBusy = false; refreshChat(); } });
+$('sendVoice').onclick = run(async () => {
+  if (voiceBusy || !voice.draft) return; const peer = active; voiceBusy = true; refreshChat();
+  try {
+    if (peers.get(peer)?.channel?.readyState === 'open') { const message = await voice.send(peer); addMessage(peer, message, true); }
+    else { const { payload, message } = await voice.exportDraft(peer); try { await api('relay', { to: peer, voice: payload }); } catch (e) { URL.revokeObjectURL(message.voice.url); throw e; } addMessage(peer, message, true); }
+    clearVoice();
+  } finally { voiceBusy = false; refreshChat(); }
+});
 $('message').oninput = () => { resizeComposer(); refreshChat(); const p = peers.get(active); if (p?.channel?.readyState === 'open' && Date.now() - lastTyping > 1300) { lastTyping = Date.now(); try { p.channel.send(JSON.stringify({ type: 'typing', value: !!$('message').value })); } catch {} } };
 $('message').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && window.matchMedia('(pointer:fine)').matches) { e.preventDefault(); $('composer').requestSubmit(); } };
 $('composer').onsubmit = e => {
   e.preventDefault(); const p = peers.get(active), text = $('message').value.trim(); if (!text) return;
-  if (p?.channel?.readyState !== 'open') { const friend = account?.friends.find(f => f.id === active); return toast(friend && !friend.online ? friend.name + ' is offline. Your message stays here until you are both online.' : 'Still connecting. Send again in a moment.'); }
+  if (p?.channel?.readyState !== 'open') {
+    // No direct channel: deliver through the server mailbox.
+    const to = active; $('message').value = ''; drafts.delete(to); resizeComposer(); refreshChat();
+    api('relay', { to, text }).then(() => addMessage(to, text, true)).catch(e => { if (active === to && !$('message').value) { $('message').value = text; resizeComposer(); refreshChat(); } toast(e.message); });
+    return;
+  }
   if (p.channel.bufferedAmount > 1000000) return toast('The connection is busy. Try again shortly.');
   try { p.channel.send(JSON.stringify({ type: 'message', text })); addMessage(active, text, true); $('message').value = ''; drafts.delete(active); resizeComposer(); refreshChat(); }
   catch { toast('Message could not be sent. Please try again.'); }

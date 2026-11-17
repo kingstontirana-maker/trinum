@@ -14,6 +14,20 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
   let store = { users: [], requests: [], payments: [] };
   if (fs.existsSync(dataFile)) store = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   store.payments ||= [];
+  // Mailbox for messages sent while no direct WebRTC channel is open. Each item is
+  // deleted as soon as the recipient's browser acknowledges it.
+  const mailFile = path.join(path.dirname(dataFile), 'mail.json');
+  let mail = fs.existsSync(mailFile) ? JSON.parse(fs.readFileSync(mailFile, 'utf8')) : [];
+  let mailWrites = Promise.resolve();
+  const persistMail = () => {
+    const snapshot = JSON.stringify(mail);
+    const operation = mailWrites.catch(() => {}).then(async () => {
+      await fs.promises.mkdir(path.dirname(mailFile), { recursive: true });
+      await fs.promises.writeFile(mailFile + '.tmp', snapshot, { mode: 0o600 });
+      await fs.promises.rename(mailFile + '.tmp', mailFile);
+    });
+    mailWrites = operation; return operation;
+  };
   const isAdmin = u => u?.role === 'admin';
   // Status is derived from the stored deadline, so expiry needs no write.
   const subStatus = u => isAdmin(u) ? 'admin' : u.suspended ? 'suspended' : !subscriptions ? 'active' : u.paidUntil > now() ? 'active' : u.paidUntil ? 'expired' : 'pending';
@@ -67,6 +81,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
     store.users = store.users.filter(x => x.id !== deletedId);
     for (const other of store.users) other.friends = other.friends.filter(id => id !== deletedId);
     store.requests = store.requests.filter(r => r.from !== deletedId && r.to !== deletedId);
+    mail = mail.filter(m => m.from !== deletedId && m.to !== deletedId); persistMail().catch(() => {});
     try { await persist(); } catch (e) { store = previous; throw e; }
     for (const [token, session] of sessions) if (session.userId === deletedId) revoke(token);
     for (const key of connecting.keys()) if (key.split(':').includes(deletedId)) connecting.delete(key);
@@ -216,7 +231,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
       let body = {};
       if (req.method === 'POST') {
         let raw = '';
-        for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > (url.pathname === '/api/avatar' ? 100000 : 65536)) fail(413, 'Request is too large.'); }
+        for await (const chunk of req) { raw += chunk; if (raw.length > ({ '/api/avatar': 100000, '/api/relay': 2000000 }[url.pathname] || 65536)) fail(413, 'Request is too large.'); }
         try { body = JSON.parse(raw || '{}'); } catch { fail(400, 'Invalid request.'); }
         if (!body || typeof body !== 'object' || Array.isArray(body)) fail(400, 'Invalid request.');
       }
@@ -287,6 +302,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
         res.writeHead(200, { 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         if (s.stream) { s.stream.write('event: tab-replaced\ndata: {}\n\n'); s.stream.end(); } s.stream = res;
         res.write(`event: state\ndata: ${JSON.stringify(state(u))}\n\n`); presence(u.id);
+        for (const m of mail) if (m.to === u.id) res.write(`event: mail\ndata: ${JSON.stringify(m)}\n\n`);
         req.on('close', () => {
           if (s.stream !== res) return; s.stream = null;
           const timer = setTimeout(() => { if (!online(u.id)) { for (const id of u.friends) emit(id, 'offline', { id: u.id }); presence(u.id); } }, 5000); timer.unref();
@@ -348,6 +364,15 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
         try { await persist(); } catch (e) { Object.assign(u, old); throw e; }
         update(u.id); return json(200, state(u));
       }
+      if (url.pathname === '/api/ack') {
+        if (!Array.isArray(body.ids) || body.ids.length > 1000) fail(400, 'Invalid request.');
+        const ids = new Set(body.ids.map(String)), done = mail.filter(m => m.to === u.id && ids.has(m.id));
+        if (done.length) {
+          mail = mail.filter(m => !done.includes(m)); await persistMail();
+          for (const m of done) emit(m.from, 'delivered', { id: m.id, to: u.id });
+        }
+        return json(200, {});
+      }
       const target = user(String(body.to || ''));
       if (!target || target.id === u.id) fail(404, 'User not found.');
       if (url.pathname === '/api/request') {
@@ -366,6 +391,22 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
         emit(target.id, 'notice', { text: `${u.name} ${body.accept ? 'accepted' : 'declined'} your friend request.` }); return json(200, state(u));
       }
       if (!u.friends.includes(target.id)) fail(403, 'Accept the friend request before chatting.');
+      if (url.pathname === '/api/relay') {
+        const m = { id: crypto.randomBytes(12).toString('hex'), from: u.id, to: target.id, at: now() };
+        if (body.voice) {
+          const v = body.voice;
+          if (!v || typeof v !== 'object' || typeof v.mime !== 'string' || v.mime.length > 100 || !/^audio\/[a-z0-9.+-]+(\s*;\s*[a-z0-9=.,"' +-]*)?$/i.test(v.mime)) fail(400, 'Invalid voice message.');
+          if (typeof v.data !== 'string' || !v.data || v.data.length > 1400000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(v.data)) fail(400, 'Invalid voice message.');
+          const duration = Number(v.duration); if (!Number.isFinite(duration) || duration <= 0 || duration > 61) fail(400, 'Invalid voice message.');
+          m.voice = { mime: v.mime, duration, data: v.data };
+        } else {
+          if (typeof body.text !== 'string' || !body.text.trim() || body.text.length > 16000) fail(400, 'Write a message.');
+          m.text = body.text;
+        }
+        mail.push(m); await persistMail();
+        emit(target.id, 'mail', m);
+        return json(200, { id: m.id, at: m.at, delivered: false });
+      }
       if (!hasAccess(target)) fail(409, 'This person cannot chat right now.');
       if (!online(target.id)) fail(409, 'Your friend is offline. Chat when you are both online.');
       if (url.pathname === '/api/connect') {
