@@ -1,0 +1,55 @@
+# Trinum
+
+A dark, English-language, mobile-first private messenger. Uses Node.js 22+ and browser APIs; no npm packages are needed.
+
+## Start locally
+
+```sh
+npm start
+```
+
+Open **http://localhost:3000**. Apache/XAMPP alone does not run the Node server. The first screen is login, with a registration tab. Existing valid sessions return to the app automatically.
+
+For a two-person test, use two separate browser profiles or one normal and one private window. Create two accounts, search for the other person's name or `@username`, send a friend invitation, then accept it in **Requests** on the recipient's account. Friends can accept or decline invitations even if the sender has gone offline. Both people must be online to exchange messages.
+
+## Features
+
+- Password login, unique usernames, persistent friendships and pending invitations.
+- Passwords hashed with salted scrypt; random sessions in HttpOnly, SameSite=Strict cookies.
+- Search registered users by display name or username, including offline users.
+- Real-time online friends, invitation badges, accept/decline and request status.
+- WebRTC encrypted peer messaging and typing indicators. Up to 500 messages per conversation held in browser memory.
+- Mobile bottom navigation, full-screen conversations, back navigation, safe-area spacing and keyboard viewport handling.
+- No message persistence, no message API, no message backups or server message history. Refreshing a tab clears its messages. The recipient's separate tab keeps its own messages until that tab is refreshed or closed.
+- One active browser session per account. Logging in elsewhere revokes the previous session. Opening a second tab transfers the live session to that tab.
+
+## Data
+
+Voice messages: tap the microphone in a connected chat, record up to 60 seconds, stop to preview, then send or discard. Browser microphone permission and HTTPS (or localhost) are required. Audio is chunked over the encrypted WebRTC data channel and never sent to the server. Clips are capped at 1 MB, pending transfers time out, and each conversation retains at most 16 MB of voice audio in memory. Leaving a conversation, signing out or using Emergency exit stops recording; refreshing clears voice messages. Playback format support depends on the recipient's browser.
+
+An always-visible red **Emergency exit** button is available while signed in, including within profile/privacy/security dialogs. One click immediately clears the local interface and connections and replaces the current page with `https://www.youtube.com/`, without waiting for a server response. A same-origin beacon (with keepalive fetch fallback) revokes the server session and persists a deletion deadline of 30 minutes. Signing in with the normal password before that deadline cancels deletion; wrong passwords, revisiting the page or using an old session do not. The server deletes overdue accounts with a scheduled timer and checks deadlines at startup and before API requests. If the server was stopped, overdue deletion is performed when it restarts. A local sign-out marker, cross-tab broadcast and back/forward-cache reload prevent automatic access on return. Server revocation and scheduling still require successful network delivery; immediate redirection cannot guarantee delivery while offline. This cannot erase browser history, external copies or backups. The separate emergency password continues to delete the account immediately.
+
+Users can upload an avatar from Profile (JPG/PNG/WebP up to 5 MB). The browser center-crops and re-encodes it to a 256×256 JPEG, stripping source metadata; the server limits the saved image to 64 KB. Avatar images are served only to signed-in users. Remove an avatar from the same panel.
+
+New registration requires both a normal and emergency password, confirmation and an explicit acknowledgement of deletion. Profile → Emergency password allows changing or disabling the emergency credential after confirming the normal password. It must be 10–128 characters and differ from the normal password. Entering it at normal sign-in permanently deletes that account, its avatar, friendships and requests and revokes its sessions. There is no confirmation at sign-in. Older accounts have this feature disabled until configured; no default emergency passwords are assigned. Deletion removes current application records; it does not guarantee forensic disk erasure or deletion of external backups, copies or screenshots.
+
+The server stores only account details, password salts/hashes, friend IDs and pending requests in `.data/accounts.json`, using atomic file replacement. Keep this private file out of source control. The Node server serves only an explicit asset allowlist, and Apache `.htaccess` rules also deny account-file access. No message text or WebRTC negotiation data is written to this file. Temporary session cookies and signaling connections live in server memory; a server restart requires users to log in again.
+
+## Public deployment
+
+Deploy the Node process behind HTTPS, preserve the public Host header and disable proxy buffering for `/api/events`. Set `COOKIE_SECURE=1` behind your HTTPS proxy. Serve this app at the domain root, or configure your proxy accordingly; the frontend uses root-relative API paths.
+
+For reliable mobile connections across restrictive networks, add an authenticated TURN service to the `iceServers` configuration in `app.js`. The included public STUN service alone cannot connect every NAT/firewall combination. WebRTC can reveal a peer's IP address, and the STUN provider sees connection metadata. Invite only people you know.
+
+Messages use WebRTC DTLS encryption. Identity depends on the signaling server: this version has no independent key verification and has not undergone a security audit. Recipients can copy messages or take screenshots. Account recovery, email verification and offline message delivery are not implemented.
+
+## Verification
+
+```sh
+npm test
+node --check server.js
+node --check app.js
+npm run test:browser
+```
+
+The browser check uses an existing local Chromium installation with no testing dependencies. Set `CHROME_PATH` to its executable if needed. It creates temporary accounts outside the app's real data directory, tests two independent browser contexts and saves screenshots in `.artifacts/`. Covers registration/login, search, invitations, online friends, bidirectional WebRTC messages, mobile back navigation, reduced keyboard viewport, persistence and widths 320/360/390/430/768/1440. The server tests also cover rejected invitations and blocked unauthorized signaling.

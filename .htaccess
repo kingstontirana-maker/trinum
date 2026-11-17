@@ -1,0 +1,4 @@
+RedirectMatch 404 (^|/)\.data(/|$)
+<FilesMatch "^(server\.js|.*\.test\.js|package.*\.json|README\.md)$">
+Require all denied
+</FilesMatch>

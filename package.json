@@ -1,0 +1,1 @@
+{"name":"trinum","version":"2.0.0","private":true,"scripts":{"start":"node server.js","test":"node --test --test-isolation=none","test:browser":"node scripts/browser-check.js"},"engines":{"node":">=22"}}
