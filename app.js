@@ -7,6 +7,11 @@ let emergencyExiting = false;
 const seenMail = new Set(), pendingAcks = new Set(); let ackTimer;
 function flushAcks() { const ids = [...pendingAcks]; if (!ids.length) return; pendingAcks.clear(); api('ack', { ids }).catch(() => { for (const id of ids) pendingAcks.add(id); ackTimer = setTimeout(flushAcks, 3000); }); }
 const peers = new Map(), unread = new Map(), drafts = new Map();
+let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+function loadIce() { api('ice').then(d => { if (Array.isArray(d.iceServers) && d.iceServers.length) iceServers = d.iceServers; }).catch(() => {}); }
+const calls = new TrinumCalls({ api: (route, body) => api(route, body), iceServers: () => iceServers, friend: id => account?.friends.find(f => f.id === id), toast: text => toast(text), log: (id, text, own) => { if (account?.friends.some(f => f.id === id)) addMessage(id, text, own); } });
+$('voiceCall').onclick = () => { if (active) calls.start(active, false); };
+$('videoCall').onclick = () => { if (active) calls.start(active, true); };
 const voice = new TrinumVoice({ channel: id => peers.get(id)?.channel, received: (id, message) => addMessage(id, message, false), notice: text => toast(text) });
 let voiceBusy = false;
 function clearVoice() { voice.cancel(); $('voicePreview').pause(); $('voicePreview').removeAttribute('src'); $('voicePanel').hidden = true; voiceBusy = false; }
@@ -58,7 +63,7 @@ $('authForm').onsubmit = async e => {
   finally { authBusy = false; $('authSubmit').disabled = false; $('authSubmit').querySelector('span').textContent = authMode === 'register' ? 'Create my account' : 'Sign in to Trinum'; }
 };
 function closePeers() {
-  clearVoice(); voice.close();
+  calls.end(); clearVoice(); voice.close();
   for (const p of peers.values()) { p.messages.forEach(releaseMessage); clearTimeout(p.timeout); clearTimeout(p.typingTimer); p.pc?.close(); }
   peers.clear(); drafts.clear(); unread.clear(); active = null; $('message').value = ''; $('messages').replaceChildren();
   $('chatView').hidden = true; $('welcome').hidden = false; $('workspace').classList.remove('in-chat');
@@ -91,6 +96,7 @@ function leaveApp(message) {
 }
 function enterApp(data) {
   try { sessionStorage.removeItem('trinum-emergency-signed-out'); } catch {}
+  loadIce();
   $('authPage').hidden = true; $('workspace').hidden = false; active = null; view = 'chats';
   $('emergencyBar').hidden = false; updateViewport();
   applyState(data); showView('chats'); startEvents();
@@ -122,7 +128,9 @@ function startEvents() {
   stream.addEventListener('state', e => { if (events !== stream) return; signalingReady = true; applyState(JSON.parse(e.data)); });
   stream.addEventListener('connect', e => { if (account) createPeer(JSON.parse(e.data)).catch(e => toast(e.message)); });
   stream.addEventListener('signal', e => {
-    const data = JSON.parse(e.data), p = peers.get(data.id); if (!p) return;
+    const data = JSON.parse(e.data);
+    if (data.signal?.call) { if (account) calls.handle(data.id, data.signal.call); return; }
+    const p = peers.get(data.id); if (!p) return;
     p.signals = p.signals.then(() => handleSignal(p, data.signal)).catch(e => { p.status = 'Could not connect. Please try again.'; refreshChat(); });
   });
   stream.addEventListener('notice', e => toast(JSON.parse(e.data).text));
@@ -277,7 +285,7 @@ async function connect(id, force = false) {
 async function createPeer(data) {
   const p = getPeer(data.id); clearTimeout(p.timeout); p.pc?.close();
   p.channel = null; p.typing = false; p.candidates = []; p.signals = Promise.resolve(); p.status = 'Establishing your private connection…';
-  const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }); p.pc = pc;
+  const pc = new RTCPeerConnection({ iceServers }); p.pc = pc;
   pc.onicecandidate = e => { if (e.candidate && p.pc === pc) api('signal', { to: data.id, signal: { candidate: e.candidate } }).catch(() => {}); };
   pc.ondatachannel = e => { if (p.pc === pc) bindChannel(p, e.channel, pc); };
   pc.onconnectionstatechange = () => {

@@ -66,6 +66,12 @@ Access costs **$199 per month** (`PLAN_PRICE`). New accounts start as **pending*
 
 The admin panel is at **`/admin`**. Set `ADMIN_PASSWORD` (and optionally `ADMIN_USERNAME`, default `admin`) in the server environment; the account is created or its password updated at every start. The panel shows revenue and user statistics, a searchable/sortable user list with status filters, one-click "+1 month · $199" renewals, custom periods and amounts, manual expiry dates, expire-now, notes, password resets, sign-out everywhere, suspension, admin roles, account deletion, payment history with removal, new-user creation and CSV exports. Payments are recorded manually by the administrator; no card processor is connected.
 
+## Voice and video calls
+
+The phone and camera buttons in a chat header start a voice or video call with a friend who is online. The friend sees a full-screen incoming call with Accept and Decline (and a ringtone); unanswered calls stop after 45 seconds and show as a missed call in the conversation. During a call you can mute, turn the camera off, switch between front and back camera on phones, and hang up. Audio and video travel directly between the two browsers over WebRTC (encrypted with DTLS-SRTP); the server only passes the call signals and never sees the media. The Emergency exit bar stays visible during a call and ends it.
+
+Strict networks (some mobile carriers, corporate Wi-Fi) can block direct connections. For those, run a TURN relay such as coturn with `use-auth-secret` and set `TURN_URLS` (comma-separated, for example `turn:turn.example.com:3478?transport=udp,turns:turn.example.com:5349`) and `TURN_SECRET`; Trinum then hands browsers short-lived TURN credentials from `/api/ice`.
+
 ## Offline delivery
 
 Messages and voice messages can be sent at any time. While a direct WebRTC channel is open they travel peer to peer. Otherwise they go through the server: they are held in `mail.json` (next to `accounts.json`) only until the recipient's browser receives and acknowledges them, then deleted. The recipient gets them live if Trinum is open, or the next time they open it. Undelivered messages are readable by the server operator while they wait; they are not end-to-end encrypted. Messages are only accepted between friends.

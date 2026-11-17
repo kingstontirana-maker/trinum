@@ -10,7 +10,7 @@ function addMonths(ts, months) {
   const d = new Date(ts), day = d.getUTCDate(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + months);
   d.setUTCDate(Math.min(day, new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate())); return d.getTime();
 }
-function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts.json'), now = Date.now, admin = null, price = 199, subscriptions = true } = {}) {
+function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts.json'), now = Date.now, admin = null, price = 199, subscriptions = true, turn = null } = {}) {
   let store = { users: [], requests: [], payments: [] };
   if (fs.existsSync(dataFile)) store = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   store.payments ||= [];
@@ -213,7 +213,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
     const json = (code, data) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
     const fail = (code, message) => { const e = new Error(message); e.status = code; throw e; };
     if (!url.pathname.startsWith('/api/')) {
-      const file = { '/': 'index.html', '/index.html': 'index.html', '/style.css': 'style.css', '/platform.css': 'platform.css', '/assets/chat-landscape.svg': 'assets/chat-landscape.svg', '/voice.js': 'voice.js', '/app.js': 'app.js', '/admin': 'admin.html', '/admin/': 'admin.html', '/admin.js': 'admin.js', '/admin.css': 'admin.css' }[url.pathname];
+      const file = { '/': 'index.html', '/index.html': 'index.html', '/style.css': 'style.css', '/platform.css': 'platform.css', '/assets/chat-landscape.svg': 'assets/chat-landscape.svg', '/voice.js': 'voice.js', '/call.js': 'call.js', '/app.js': 'app.js', '/admin': 'admin.html', '/admin/': 'admin.html', '/admin.js': 'admin.js', '/admin.css': 'admin.css' }[url.pathname];
       if (!file) return json(404, { error: 'Not found.' });
       res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
       res.setHeader('Content-Type', file.endsWith('.css') ? 'text/css; charset=utf-8' : file.endsWith('.svg') ? 'image/svg+xml' : file.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8');
@@ -285,6 +285,8 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
       if (url.pathname === '/api/events' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
         if (s.stream) { s.stream.write('event: tab-replaced\ndata: {}\n\n'); s.stream.end(); } s.stream = res;
+        // A new tab or sign-in starts fresh: earlier connection attempts with this user are stale.
+        for (const key of connecting.keys()) if (key.split(':').includes(u.id)) connecting.delete(key);
         res.write(`event: state\ndata: ${JSON.stringify(state(u))}\n\n`); presence(u.id);
         for (const m of mail) if (m.to === u.id) res.write(`event: mail\ndata: ${JSON.stringify(m)}\n\n`);
         req.on('close', () => {
@@ -295,6 +297,15 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
       if (Date.now() - s.window > 60000) { s.window = Date.now(); s.count = 0; }
       if (++s.count > 240) fail(429, 'Too many requests. Try again in a minute.');
       if (url.pathname === '/api/me' && req.method === 'GET') return json(200, state(u));
+      if (url.pathname === '/api/ice' && req.method === 'GET') {
+        // STUN finds direct routes; an optional TURN relay (coturn with use-auth-secret) covers strict networks.
+        const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+        if (turn?.urls?.length && turn.secret) {
+          const username = Math.floor(Date.now() / 1000 + 12 * 3600) + ':' + u.id;
+          iceServers.push({ urls: turn.urls, username, credential: crypto.createHmac('sha1', turn.secret).update(username).digest('base64') });
+        }
+        return json(200, { iceServers });
+      }
       if (url.pathname.startsWith('/api/admin/')) {
         if (!isAdmin(u)) fail(403, 'Administrator access required.');
         return await adminRoute(url.pathname.slice(11), req.method, body, u, json, fail);
@@ -416,6 +427,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
 if (require.main === module) createTrinumServer({
   ...(process.env.DATA_DIR ? { dataFile: path.join(process.env.DATA_DIR, 'accounts.json') } : {}),
   admin: process.env.ADMIN_PASSWORD ? { username: process.env.ADMIN_USERNAME || 'admin', password: process.env.ADMIN_PASSWORD } : null,
-  price: Number(process.env.PLAN_PRICE) > 0 ? Number(process.env.PLAN_PRICE) : 199
+  price: Number(process.env.PLAN_PRICE) > 0 ? Number(process.env.PLAN_PRICE) : 199,
+  turn: process.env.TURN_URLS && process.env.TURN_SECRET ? { urls: process.env.TURN_URLS.split(',').map(x => x.trim()).filter(Boolean), secret: process.env.TURN_SECRET } : null
 }).listen(process.env.PORT || 3000, () => console.log('Trinum: http://localhost:' + (process.env.PORT || 3000)));
 module.exports = { createTrinumServer };

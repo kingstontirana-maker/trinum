@@ -46,3 +46,37 @@
 .chat-view .chat-header{min-height:0;padding-bottom:2px}
 .chat-view .message-scroll{padding-top:0}
 .chat-view .chat-start .date-chip{padding:2px 0 12px}
+
+/* Calls */
+.call-buttons{display:flex;gap:2px;margin-left:auto}.call-buttons+.session-badge{margin-left:6px}.call-button{color:#9ee7dc;min-width:40px;min-height:40px}.call-button:hover{background:#74dccc14;color:var(--accent)}.call-button svg{width:20px;height:20px}
+.call-view{position:fixed;inset:0;z-index:30;background:radial-gradient(circle at 50% 30%,#123230,#050b0b 70%);display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:max(40px,env(safe-area-inset-top)) 20px max(34px,env(safe-area-inset-bottom));color:var(--text);overflow:hidden}
+.call-view[hidden]{display:none}
+.remote-video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000;opacity:0;pointer-events:none}
+.call-view.remote-on .remote-video{opacity:1}
+.call-person{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:9vh;text-align:center}
+.call-avatar{width:112px;height:112px;border-radius:36px;font-size:40px;box-shadow:0 0 0 10px #27f5dc12,0 0 0 22px #27f5dc08}
+.call-view.phase-incoming .call-avatar,.call-view.phase-outgoing .call-avatar{animation:call-pulse 1.8s ease-in-out infinite}
+@keyframes call-pulse{50%{box-shadow:0 0 0 16px #27f5dc1c,0 0 0 34px #27f5dc0a}}
+.call-person h2{font-size:26px;font-weight:500;letter-spacing:-.5px;margin-top:14px;overflow-wrap:anywhere}
+.call-person p{font-size:13px;color:#a6cfc9;font-variant-numeric:tabular-nums}
+.call-view.remote-on .call-person{margin-top:0;align-self:flex-start;flex-direction:row;gap:12px;background:#050b0b99;padding:8px 14px 8px 8px;border-radius:16px;backdrop-filter:blur(10px)}
+.call-view.remote-on .call-avatar{width:36px;height:36px;border-radius:12px;font-size:14px;box-shadow:none;animation:none}
+.call-view.remote-on .call-person h2{font-size:14px;margin:0}.call-view.remote-on .call-person p{font-size:11px}
+.local-video{position:absolute;z-index:2;right:16px;top:max(16px,env(safe-area-inset-top));width:min(28vw,150px);aspect-ratio:3/4;object-fit:cover;border-radius:16px;border:1px solid #ffffff2a;background:#0a1212;box-shadow:0 10px 30px #0008;display:none}
+.call-view.local-on .local-video{display:block}.call-view.mirror .local-video{transform:scaleX(-1)}
+.call-view.video.local-on:not(.remote-on).phase-outgoing .local-video,.call-view.video.local-on:not(.remote-on).phase-connecting .local-video{inset:0;width:100%;height:100%;border-radius:0;border:0;z-index:0;opacity:.55}
+.call-incoming,.call-controls{position:relative;z-index:3;display:flex;gap:18px;justify-content:center;align-items:flex-end}
+.call-incoming{gap:70px}
+.call-round{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;background:#ffffff1c;color:#fff;backdrop-filter:blur(12px);position:relative}
+.call-round:hover{background:#ffffff2c}.call-round svg{width:25px;height:25px}
+.call-round span{position:absolute;top:calc(100% + 9px);font-size:11px;color:#b9d8d4;white-space:nowrap}
+.call-round.accept{background:#1fbf75;width:70px;height:70px}.call-round.accept:hover{background:#25d684}
+.call-round.decline{background:#e5484d;width:70px;height:70px}.call-round.decline:hover{background:#f05a5f}
+.call-incoming .call-round{margin-bottom:24px}
+.call-round .off-icon{display:none}.call-round.off{background:#fff;color:#0a1212}.call-round.off .on{display:none}.call-round.off .off-icon{display:block}
+.call-round[hidden]{display:none}
+body.in-call .toast{z-index:40}
+@media(max-width:620px){.call-button{min-width:36px;min-height:40px}.call-button svg{width:19px;height:19px}.chat-header .session-badge{display:none}.call-controls{gap:14px}.call-round{width:56px;height:56px}.call-round.accept,.call-round.decline{width:64px;height:64px}}
+/* Keep the Emergency exit bar visible above an active call. */
+.call-view{top:calc(42px + env(safe-area-inset-top));padding-top:28px}
+.local-video{top:16px}

@@ -124,6 +124,28 @@ async function main() {
     await click(alice, '#listContent .person-row');
     await wait(alice, `document.getElementById('messages').textContent.includes('Sent while you were away') && document.querySelector('#messages audio')?.readyState >= 1`, 'offline text and voice delivered');
     await delay(500); assert.equal(JSON.parse(await fs.readFile(path.join(temp, 'mail.json'), 'utf8')).length, 0, 'Delivered messages removed from the server');
+    // Video call: Bob calls, Aria answers, both see live video, Aria hangs up.
+    await wait(bob, `document.getElementById('chatStatus').classList.contains('connected')`, 'chat reconnected before call');
+    await click(bob, '#videoCall');
+    await wait(alice, `!document.getElementById('callView').hidden && !document.getElementById('callIncoming').hidden && document.getElementById('callStatus').textContent === 'Incoming video call'`, 'incoming video call rings');
+    await screenshot(alice, 'call-incoming-mobile');
+    await click(alice, '#callAccept');
+    for (const [who, name] of [[alice, 'Aria'], [bob, 'Bob']]) await wait(who, `document.getElementById('callView').classList.contains('phase-active') && document.getElementById('remoteVideo').videoWidth > 0 && document.getElementById('localVideo').videoWidth > 0`, name + ' sees live video');
+    await click(bob, '#callMute'); assert.ok(await evaluate(bob, `calls.call.local.getAudioTracks()[0].enabled === false && document.getElementById('callMute').classList.contains('off')`), 'Mute disables the microphone');
+    await delay(1200); await screenshot(bob, 'call-video-mobile'); await size(bob, 1440, 1000); await screenshot(bob, 'call-video-desktop'); await size(bob, 390);
+    await click(alice, '#callEnd');
+    for (const [who, name] of [[alice, 'Aria'], [bob, 'Bob']]) await wait(who, `document.getElementById('callView').hidden && document.getElementById('messages').textContent.includes('Video call · ')`, name + ' call ended and logged');
+    assert.ok(await evaluate(bob, `document.getElementById('remoteVideo').srcObject === null && calls.call === null`), 'Call resources released');
+    // Voice call that is declined.
+    await click(alice, '#voiceCall');
+    await wait(bob, `!document.getElementById('callIncoming').hidden && document.getElementById('callStatus').textContent === 'Incoming voice call'`, 'incoming voice call rings');
+    await click(bob, '#callDecline');
+    await wait(alice, `document.getElementById('callView').hidden && document.getElementById('toastText').textContent.includes('declined')`, 'declined call ends for caller');
+    await click(bob, '#voiceCall');
+    await wait(alice, `!document.getElementById('callIncoming').hidden`, 'second voice call rings'); await click(alice, '#callAccept');
+    for (const [who, name] of [[alice, 'Aria'], [bob, 'Bob']]) await wait(who, `document.getElementById('callView').classList.contains('phase-active') && document.getElementById('callView').classList.contains('voice') && document.getElementById('callCamera').hidden`, name + ' in voice call');
+    await screenshot(alice, 'call-voice-mobile'); await click(bob, '#callEnd');
+    await wait(alice, `document.getElementById('callView').hidden`, 'voice call ended');
     await click(alice, '#backToList');
     await click(alice, '#mobileProfile'); await click(alice, '#openSecurity');
     const emergency = 'temporary-emergency-789';
