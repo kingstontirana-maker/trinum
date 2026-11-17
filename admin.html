@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#050b0b"><meta name="robots" content="noindex"><title>Trinum Admin</title><link rel="stylesheet" href="/admin.css"><script defer src="/admin.js"></script></head>
+<body>
+<svg class="svg-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-exit" viewBox="0 0 24 24"><path d="M9 4H4v16h5m6-13 5 5-5 5M9 12h11"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24"><path d="M20 11.5a8 8 0 0 1-8 8H4l1.4-4A8 8 0 1 1 20 11.5Z"/></symbol>
+<symbol id="i-down" viewBox="0 0 24 24"><path d="M12 4v12m-5-5 5 5 5-5M5 20h14"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+<symbol id="i-card" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 10h18M7 15h4"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-8 11-8 11S4 16 4 11V5l8-3Z"/><path d="m8 11 3 3 5-6"/></symbol>
+</defs></svg>
+
+<section class="gate" id="gate" hidden>
+  <form class="gate-card" id="gateForm">
+    <div class="brand"><span class="mark">t<span>·</span></span><span>trinum<em>.</em> <b>admin</b></span></div>
+    <h1 id="gateTitle">Administrator sign in</h1>
+    <p id="gateText">Sign in with an administrator account to manage users, subscriptions and payments.</p>
+    <label for="gateUser">Username</label><input id="gateUser" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="gatePass">Password</label><input id="gatePass" type="password" autocomplete="current-password" maxlength="1024" required>
+    <p class="error" id="gateError" role="alert" hidden></p>
+    <button class="btn primary wide" id="gateSubmit">Sign in</button>
+    <a class="gate-link" href="/">Back to Trinum</a>
+  </form>
+</section>
+
+<div class="shell" id="shell" hidden>
+  <header class="topbar">
+    <div class="brand"><span class="mark">t<span>·</span></span><span>trinum<em>.</em> <b>admin</b></span></div>
+    <div class="top-actions">
+      <span class="sync" id="sync">Loading…</span>
+      <button class="icon-btn" id="refresh" title="Refresh" aria-label="Refresh"><svg><use href="#i-refresh"/></svg></button>
+      <a class="btn ghost" href="/"><svg><use href="#i-chat"/></svg><span>Messenger</span></a>
+      <button class="btn ghost" id="signOut"><svg><use href="#i-exit"/></svg><span>Sign out</span></button>
+    </div>
+  </header>
+
+  <main class="content">
+    <div class="page-head">
+      <div><span class="kicker">CONTROL CENTER</span><h1>Users &amp; subscriptions</h1><p class="muted" id="priceLine">Plan: $199 per month</p></div>
+      <button class="btn primary" id="newUser"><svg><use href="#i-plus"/></svg><span>New user</span></button>
+    </div>
+
+    <section class="stats" id="stats" aria-label="Statistics"></section>
+
+    <div class="tabs" role="tablist">
+      <button role="tab" class="tab active" data-tab="users" aria-selected="true"><svg><use href="#i-users"/></svg> Users <span id="usersTabCount"></span></button>
+      <button role="tab" class="tab" data-tab="payments" aria-selected="false"><svg><use href="#i-card"/></svg> Payments <span id="paymentsTabCount"></span></button>
+    </div>
+
+    <section id="usersPanel">
+      <div class="toolbar">
+        <label class="search"><svg><use href="#i-search"/></svg><input id="userSearch" placeholder="Search name, @username or note…" autocomplete="off" aria-label="Search users"></label>
+        <div class="filters" id="filters"></div>
+        <div class="toolbar-end">
+          <select id="sortBy" aria-label="Sort users">
+            <option value="expiry">Sort: expiry date</option>
+            <option value="joined">Sort: newest</option>
+            <option value="login">Sort: last sign-in</option>
+            <option value="paid">Sort: total paid</option>
+            <option value="name">Sort: name</option>
+          </select>
+          <button class="btn ghost" id="exportUsers"><svg><use href="#i-down"/></svg><span>CSV</span></button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="table users-table">
+          <thead><tr><th>User</th><th>Status</th><th>Expires</th><th>Paid</th><th>Last sign-in</th><th>Joined</th><th class="right">Actions</th></tr></thead>
+          <tbody id="userRows"></tbody>
+        </table>
+        <p class="empty" id="usersEmpty" hidden>No users match this view.</p>
+      </div>
+    </section>
+
+    <section id="paymentsPanel" hidden>
+      <div class="toolbar">
+        <label class="search"><svg><use href="#i-search"/></svg><input id="paymentSearch" placeholder="Search payments…" autocomplete="off" aria-label="Search payments"></label>
+        <div class="toolbar-end"><span class="muted" id="paymentsTotal"></span><button class="btn ghost" id="exportPayments"><svg><use href="#i-down"/></svg><span>CSV</span></button></div>
+      </div>
+      <div class="table-wrap">
+        <table class="table payments-table">
+          <thead><tr><th>Date</th><th>User</th><th>Period</th><th>Amount</th><th>Recorded by</th><th>Note</th><th class="right"></th></tr></thead>
+          <tbody id="paymentRows"></tbody>
+        </table>
+        <p class="empty" id="paymentsEmpty" hidden>No payments recorded yet.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<dialog id="manage" class="drawer" aria-labelledby="mName">
+  <header class="drawer-head">
+    <div class="who"><span class="avatar" id="mAvatar"></span><div><h2 id="mName"></h2><p id="mUsername"></p></div></div>
+    <button class="icon-btn close" aria-label="Close"><svg><use href="#i-close"/></svg></button>
+  </header>
+  <div class="drawer-body">
+    <div class="summary" id="mSummary"></div>
+
+    <section class="block" id="mSubscription">
+      <h3>Subscription</h3>
+      <form id="extendForm" class="grid-form">
+        <label>Period<select id="extMonths"><option value="1">1 month</option><option value="2">2 months</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select></label>
+        <label>Amount (USD)<input id="extAmount" type="number" min="0" step="0.01" inputmode="decimal"></label>
+        <label class="full">Payment note<input id="extNote" maxlength="200" placeholder="Optional, e.g. cash, bank transfer"></label>
+        <label class="check full"><input type="checkbox" id="extRecord" checked> Record this as a payment</label>
+        <button class="btn primary full" id="extSubmit">Extend subscription</button>
+      </form>
+      <p class="hint" id="extPreview"></p>
+      <div class="row-actions">
+        <label class="inline">Set expiry<input type="datetime-local" id="expiryInput"></label>
+        <button class="btn ghost" id="saveExpiry">Save date</button>
+        <button class="btn ghost warn" id="expireNow">Expire now</button>
+        <button class="btn ghost" id="clearExpiry">Mark unpaid</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3>Admin note</h3>
+      <textarea id="mNote" rows="3" maxlength="500" placeholder="Private note about this user"></textarea>
+      <button class="btn ghost" id="saveNote">Save note</button>
+    </section>
+
+    <section class="block" id="mAccount">
+      <h3>Account</h3>
+      <form id="resetForm" class="inline-form"><input id="resetPassword" type="text" maxlength="1024" placeholder="New password for this user" autocomplete="off" required><button class="btn ghost">Reset password</button></form>
+      <div class="row-actions">
+        <button class="btn ghost" id="signOutUser">Sign out everywhere</button>
+        <button class="btn ghost warn" id="suspendUser">Suspend</button>
+        <button class="btn ghost" id="roleUser">Make admin</button>
+      </div>
+    </section>
+
+    <section class="block">
+      <h3>Payment history</h3>
+      <ul class="history" id="mHistory"></ul>
+    </section>
+
+    <section class="block danger" id="mDanger">
+      <h3>Danger zone</h3>
+      <p class="hint">Deleting removes the account, avatar, friendships and requests. Payment records are kept.</p>
+      <form id="deleteForm" class="inline-form"><input id="deleteConfirm" placeholder="Type the username to confirm" autocomplete="off" autocapitalize="none"><button class="btn danger-btn">Delete account</button></form>
+    </section>
+  </div>
+</dialog>
+
+<dialog id="create" class="modal" aria-labelledby="createTitle">
+  <header class="drawer-head"><h2 id="createTitle">New user</h2><button class="icon-btn close" aria-label="Close"><svg><use href="#i-close"/></svg></button></header>
+  <form id="createForm" class="grid-form pad">
+    <label class="full">Full name<input id="cName" minlength="2" maxlength="40" required></label>
+    <label>Username<input id="cUsername" pattern="[a-zA-Z0-9_]{3,24}" maxlength="24" required autocapitalize="none" spellcheck="false"></label>
+    <label>Password<input id="cPassword" maxlength="1024" required autocomplete="off"></label>
+    <label>Paid period<select id="cMonths"><option value="0">Not paid yet</option><option value="1" selected>1 month</option><option value="3">3 months</option><option value="6">6 months</option><option value="12">12 months</option></select></label>
+    <label>Role<select id="cRole"><option value="user">User</option><option value="admin">Administrator</option></select></label>
+    <label class="check full"><input type="checkbox" id="cRecord" checked> Record the payment</label>
+    <p class="error full" id="createError" role="alert" hidden></p>
+    <button class="btn primary full">Create user</button>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+</body></html>

@@ -57,3 +57,11 @@ The browser check uses an existing local Chromium installation with no testing d
 ## Render
 
 `render.yaml` deploys the app as a Render web service (Blueprint). Render provides HTTPS, sets `PORT`, and `COOKIE_SECURE=1` is preset. On the free plan the filesystem is ephemeral and the service sleeps when idle: accounts in `.data/accounts.json` are lost on every restart or redeploy. For persistent accounts, use a paid instance with a persistent disk and set `DATA_DIR` to the disk's mount path (e.g. `/var/data`).
+
+## Subscriptions and admin panel
+
+Passwords have no strength rules: any non-empty password (up to 1024 characters) is accepted, including very weak ones.
+
+Access costs **$199 per month** (`PLAN_PRICE`). New accounts start as **pending** and see an activation page until an administrator records a payment. Subscriptions **expire automatically** at their end date: the user's open tabs lock immediately and friends can no longer start chats with them. Renewing adds time to the remaining period (or starts from today if expired). Statuses: `pending`, `active`, `expired`, `suspended`, `admin`.
+
+The admin panel is at **`/admin`**. Set `ADMIN_PASSWORD` (and optionally `ADMIN_USERNAME`, default `admin`) in the server environment; the account is created or its password updated at every start. The panel shows revenue and user statistics, a searchable/sortable user list with status filters, one-click "+1 month · $199" renewals, custom periods and amounts, manual expiry dates, expire-now, notes, password resets, sign-out everywhere, suspension, admin roles, account deletion, payment history with removal, new-user creation and CSV exports. Payments are recorded manually by the administrator; no card processor is connected.

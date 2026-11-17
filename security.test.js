@@ -7,7 +7,7 @@ const { createTrinumServer } = require('./server');
 
 test('avatars and emergency-password account deletion', { timeout: 20000 }, async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trinum-security-')), dataFile = path.join(dir, 'accounts.json');
-  const server = createTrinumServer({ dataFile }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const server = createTrinumServer({ dataFile, subscriptions: false }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const base = 'http://127.0.0.1:' + server.address().port, normal = 'normal-password-123', emergency = 'emergency-password-456';
   const controllers = [];
   async function call(route, body, cookie) {

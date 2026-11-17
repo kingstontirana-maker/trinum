@@ -9,7 +9,7 @@ test('accounts, directory, consent, presence, private signaling and persistence'
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trinum-test-'));
   const dataFile = path.join(dir, 'accounts.json');
   let server, base; const streams = [];
-  async function start() { server = createTrinumServer({ dataFile }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); base = 'http://127.0.0.1:' + server.address().port; }
+  async function start() { server = createTrinumServer({ dataFile, subscriptions: false }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); base = 'http://127.0.0.1:' + server.address().port; }
   async function stop() { streams.forEach(s => s.controller.abort()); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   async function call(route, body, cookie) {
     if (route === 'register' && body) body = { emergencyPassword: 'test-emergency-123', confirmEmergencyPassword: 'test-emergency-123', emergencyAcknowledge: true, ...body };
@@ -36,7 +36,7 @@ test('accounts, directory, consent, presence, private signaling and persistence'
       const r = await fetch(base + '/'); assert.equal(r.status, 200); const html = await r.text(); assert.match(html, /id="authPage"/); assert.match(html, /id="workspace" hidden/);
       assert.equal((await call('me')).status, 401); assert.equal((await call('search?q=al')).status, 401);
       assert.equal((await fetch(base + '/.data/accounts.json')).status, 404);
-      assert.equal((await call('register', { name: 'Too short', username: 'short', password: '123' })).status, 400);
+      assert.equal((await call('register', { name: 'Weak Password', username: 'weak_pw', password: '1' })).status, 200);
     });
     await t.test('registration hashes passwords and rejects duplicate usernames', async () => {
       const a = await call('register', { name: 'Alice Test', username: 'alice', password }); assert.equal(a.status, 200); alice = a.data.me; aliceCookie = a.cookie;

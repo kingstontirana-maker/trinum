@@ -8,7 +8,7 @@ const { createTrinumServer } = require('./server');
 test('emergency grace period: recovery, expiration, restart and immediate session revocation', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trinum-grace-')), dataFile = path.join(dir, 'accounts.json');
   let time = Date.now(), server, base;
-  async function start() { server = createTrinumServer({ dataFile, now: () => time }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); base = 'http://127.0.0.1:' + server.address().port; }
+  async function start() { server = createTrinumServer({ dataFile, now: () => time, subscriptions: false }); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve)); base = 'http://127.0.0.1:' + server.address().port; }
   async function stop() { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   async function call(route, body, cookie) { const r = await fetch(base + '/api/' + route, { headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) }, ...(body === undefined ? {} : { method: 'POST', body: JSON.stringify(body) }) }); return { status: r.status, data: await r.json(), cookie: r.headers.get('set-cookie')?.split(';')[0] }; }
   async function saved() { return JSON.parse(await fs.readFile(dataFile, 'utf8')); }

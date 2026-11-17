@@ -25,3 +25,20 @@
 @media(max-width:360px){.secure-brand strong{font-size:15px;letter-spacing:3px}.secure-brand small{font-size:5px}.conversation-topbar{padding-left:12px;padding-right:12px}.topbar-actions{gap:5px}.topbar-actions .icon-button{width:32px;min-width:32px;height:32px;min-height:32px}.session-badge{max-width:102px;padding:7px;font-size:7px}.workspace .chat-header{gap:8px;padding-right:12px}.workspace .chat-header>.avatar{width:33px;height:33px}.workspace .chat-person h2{font-size:14px}.workspace .chat-person p{font-size:8px}}
 @media(max-width:620px){.workspace:not(.in-chat) .conversation{display:none}}
 @media(max-height:600px){.workspace .ephemeral-card{display:none}.conversation-topbar{min-height:56px;padding-top:8px;padding-bottom:5px}.workspace .chat-header{min-height:58px;padding-top:7px;padding-bottom:7px}.workspace .chat-privacy-note{margin-bottom:12px}.workspace .chat-privacy-note p{font-size:9px}.secure-brand-emblem>svg{height:31px}.secure-brand-emblem>svg:last-child{height:12px;top:9px}}
+.paywall{min-height:100dvh;display:grid;place-items:center;padding:80px 16px 32px;background:radial-gradient(ellipse at 50% 0,#3e8b7f26,transparent 62%)}
+.paywall-card{width:100%;max-width:440px;background:#0b1514;border:1px solid var(--line);border-radius:22px;padding:34px 28px;box-shadow:0 30px 80px #0008}
+.paywall-card .wordmark{display:flex;font-size:22px;margin-bottom:26px}.paywall-card .section-kicker{display:block}.paywall-card .brand-mark{width:38px;height:38px;font-size:30px}
+.paywall-card h2{font-size:28px;font-weight:550;letter-spacing:-1px;margin:14px 0 12px}
+.paywall-card>p{color:var(--muted);font-size:13px;line-height:1.75}
+.paywall-price{display:flex;align-items:baseline;gap:10px;margin:24px 0 18px;padding:18px 20px;border:1px solid #36756a66;border-radius:14px;background:#0b272433}
+.paywall-price strong{font-size:38px;letter-spacing:-1.5px;color:#b9fff0}.paywall-price span{color:var(--muted);font-size:12px}
+.paywall-list{list-style:none;margin:0 0 18px;padding:0;display:grid;gap:12px;font-size:13px;color:#c2eee4}
+.paywall-list li{display:flex;align-items:center;gap:12px}.paywall-list svg{width:18px;height:18px;color:var(--accent)}
+.paywall-card .paywall-note{font-size:11px;line-height:1.8;color:#8ab3ae;background:#1c322f1f;border:1px solid #4a7d7722;padding:13px;border-radius:10px}
+.subscription-line{margin-top:16px;font-size:11px;color:#8fd8c8;text-align:center}
+.admin-link{display:flex;align-items:center;gap:12px;width:100%;padding:16px 12px;border:1px solid #f5c76a44;border-radius:13px;background:#2a210b33;color:#f6dfa8;margin-top:14px;font-size:12px}
+.admin-link small{display:block;color:#c9b07a;font-size:10px;margin-top:6px}.admin-link>svg:last-child{margin-left:auto;width:17px}
+.admin-link:hover{background:#3a2d0f44}
+.admin-nav{margin-top:auto;width:100%;margin-bottom:14px;color:#e9c97a}.admin-nav:hover{color:#ffe2a0}
+.admin-nav:not([hidden])+.my-avatar{margin-top:0}
+@media (max-width:620px){.paywall{padding-top:70px}.paywall-card{padding:28px 20px}.paywall-card h2{font-size:24px}}

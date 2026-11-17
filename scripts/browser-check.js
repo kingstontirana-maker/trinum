@@ -10,7 +10,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function main() {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'trinum-browser-'));
   const artifacts = path.join(__dirname, '..', '.artifacts'); await fs.mkdir(artifacts, { recursive: true });
-  const server = createTrinumServer({ dataFile: path.join(temp, 'accounts.json') });
+  const server = createTrinumServer({ dataFile: path.join(temp, 'accounts.json'), subscriptions: false });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const origin = 'http://127.0.0.1:' + server.address().port;
   const executable = process.env.CHROME_PATH || path.join(process.env.LOCALAPPDATA, 'ms-playwright', 'chromium-1243', 'chrome-win64', 'chrome.exe');

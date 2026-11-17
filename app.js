@@ -34,7 +34,7 @@ function setAuthMode(mode) {
   $('nameField').hidden = !register; $('fullName').required = register; $('passwordHint').hidden = !register;
   $('registerEmergencyFields').hidden = !register;
   for (const id of ['registerEmergency', 'registerEmergencyConfirm', 'registerEmergencyAck']) $(id).required = register;
-  $('password').minLength = register ? 10 : 1; $('password').autocomplete = register ? 'new-password' : 'current-password';
+  $('password').minLength = 1; $('password').autocomplete = register ? 'new-password' : 'current-password';
   for (const [id, selected] of [['loginTab', !register], ['registerTab', register]]) { $(id).classList.toggle('active', selected); $(id).setAttribute('aria-selected', selected); }
   $('authTitle').textContent = register ? 'Your circle starts here.' : 'Your private space.';
   $('authSubtitle').textContent = register ? 'A new profile. Connections you choose.' : 'Sign in and reconnect with your people.';
@@ -55,12 +55,31 @@ $('authForm').onsubmit = async e => {
   } catch (error) { $('authError').textContent = error.message; $('authError').hidden = false; }
   finally { authBusy = false; $('authSubmit').disabled = false; $('authSubmit').querySelector('span').textContent = authMode === 'register' ? 'Create my account' : 'Sign in to Trinum'; }
 };
+function closePeers() {
+  clearVoice(); voice.close();
+  for (const p of peers.values()) { p.messages.forEach(releaseMessage); clearTimeout(p.timeout); clearTimeout(p.typingTimer); p.pc?.close(); }
+  peers.clear(); drafts.clear(); unread.clear(); active = null; $('message').value = ''; $('messages').replaceChildren();
+  $('chatView').hidden = true; $('welcome').hidden = false; $('workspace').classList.remove('in-chat');
+}
+const money = n => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const longDate = t => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+function renderSubscription(me) {
+  const s = me.subscription, admin = me.role === 'admin';
+  $('adminLink').hidden = !admin; $('adminNav').hidden = !admin;
+  $('subscriptionLine').hidden = admin || s.status !== 'active';
+  if (s.status === 'active' && s.paidUntil) $('subscriptionLine').textContent = 'Subscription active until ' + longDate(s.paidUntil) + '.';
+  $('paywallPrice').textContent = money(s.price);
+  const expired = s.status === 'expired';
+  $('paywallKicker').textContent = expired ? 'SUBSCRIPTION EXPIRED' : 'ACCOUNT PENDING';
+  $('paywallTitle').textContent = expired ? 'Your subscription has ended.' : 'Activate your account.';
+  $('paywallText').textContent = expired
+    ? 'It expired on ' + longDate(s.paidUntil) + '. Renew for ' + money(s.price) + ' per month to continue chatting. Contact the administrator to pay.'
+    : 'Welcome, ' + me.name + '. Access to Trinum costs ' + money(s.price) + ' per month. Contact the administrator to pay and activate your account.';
+}
 function leaveApp(message) {
-  clearVoice(); voice.close(); for (const p of peers.values()) p.messages.forEach(releaseMessage);
-  events?.close(); events = null; signalingReady = false; account = null; active = null;
-  for (const p of peers.values()) { clearTimeout(p.timeout); clearTimeout(p.typingTimer); p.pc?.close(); }
-  peers.clear(); drafts.clear(); unread.clear(); $('message').value = ''; $('messages').replaceChildren();
-  $('workspace').hidden = true; $('workspace').classList.remove('in-chat'); $('authPage').hidden = false;
+  closePeers();
+  events?.close(); events = null; signalingReady = false; account = null;
+  $('paywall').hidden = true; $('workspace').hidden = true; $('workspace').classList.remove('in-chat'); $('authPage').hidden = false;
   $('emergencyBar').hidden = true;
   $('chatView').hidden = true; $('welcome').hidden = false; $('search').value = '';
   setAuthMode('login'); $('password').value = '';
@@ -73,9 +92,16 @@ function enterApp(data) {
   $('authPage').hidden = true; $('workspace').hidden = false; active = null; view = 'chats';
   $('emergencyBar').hidden = false; updateViewport();
   applyState(data); showView('chats'); startEvents();
+  const s = data.me.subscription;
+  if (s.status === 'active' && s.paidUntil && s.paidUntil - Date.now() < 3 * 86400000) toast('Your subscription ends on ' + longDate(s.paidUntil) + '. Contact the administrator to renew.');
 }
 function applyState(data) {
   const previous = account; account = data;
+  renderSubscription(data.me);
+  const locked = !data.me.access;
+  if (locked && (!previous || previous.me.access)) { closePeers(); for (const d of document.querySelectorAll('dialog[open]')) d.close(); }
+  if (!locked && previous && !previous.me.access) toast('Your subscription is active. Welcome to Trinum.');
+  $('paywall').hidden = !locked; $('workspace').hidden = locked;
   $('greeting').textContent = 'WELCOME BACK, ' + data.me.name.toUpperCase();
   for (const id of ['profileButton', 'mobileAvatar', 'profileAvatar']) fillAvatar($(id), data.me);
   $('profileName').textContent = data.me.name; $('profileUsername').textContent = '@' + data.me.username;
@@ -368,6 +394,7 @@ for (const button of document.querySelectorAll('.emergency-action')) button.oncl
 };
 for (const b of document.querySelectorAll('.close-dialog')) b.onclick = () => b.closest('dialog').close();
 for (const d of document.querySelectorAll('dialog')) d.addEventListener('click', e => { if (e.target === d) { const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close(); } });
+$('paywallLogout').onclick = run(async () => { await api('logout', {}); leaveApp(); });
 $('logout').onclick = run(async () => { $('logout').disabled = true; try { await api('logout', {}); leaveApp(); } finally { $('logout').disabled = false; } });
 // Keep the composer above mobile keyboards, including browsers with overlay keyboards.
 function updateViewport() { if (window.matchMedia('(max-width:620px)').matches && window.visualViewport) { const nav = document.querySelector('.mobile-nav'); const navHeight = $('workspace').hidden ? 72 : nav.getBoundingClientRect().height || 72; const barHeight = $('emergencyBar').hidden ? 0 : $('emergencyBar').getBoundingClientRect().height; $('conversation').style.height = Math.max(160, window.visualViewport.height - navHeight - barHeight) + 'px'; $('conversation').style.top = window.visualViewport.offsetTop + barHeight + 'px'; } else { $('conversation').style.height = ''; $('conversation').style.top = ''; } }
