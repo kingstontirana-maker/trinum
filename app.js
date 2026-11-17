@@ -52,7 +52,7 @@ $('authForm').onsubmit = async e => {
     const data = await api(authMode, { username: $('username').value.trim(), password: $('password').value, name: $('fullName').value.trim(), ...(authMode === 'register' ? { emergencyPassword: $('registerEmergency').value, confirmEmergencyPassword: $('registerEmergencyConfirm').value, emergencyAcknowledge: $('registerEmergencyAck').checked } : {}) });
     $('password').value = '';
     $('registerEmergency').value = ''; $('registerEmergencyConfirm').value = ''; $('registerEmergencyAck').checked = false;
-    if (data.accountDeleted) { leaveApp('Your account has been permanently deleted.'); return; }
+    if (data.accountLocked) { leaveApp('This account is locked. Contact the administrator to reactivate it.'); return; }
     enterApp(data);
   } catch (error) { $('authError').textContent = error.message; $('authError').hidden = false; }
   finally { authBusy = false; $('authSubmit').disabled = false; $('authSubmit').querySelector('span').textContent = authMode === 'register' ? 'Create my account' : 'Sign in to Trinum'; }
@@ -400,7 +400,7 @@ $('disableEmergency').onclick = () => saveSecurity(true);
 // Keep an action in the browser's dialog top layer as well as the fixed app bar.
 for (const dialog of document.querySelectorAll('dialog')) {
   const button = node('button', 'emergency-action dialog-emergency', 'Emergency exit · sign out now');
-  button.type = 'button'; button.title = 'Sign out and open YouTube now. Sign back in within 30 minutes to keep your account.';
+  button.type = 'button'; button.title = 'Sign out, lock your account and open mobile.de now. Only the administrator can reactivate it.';
   dialog.prepend(button);
 }
 for (const button of document.querySelectorAll('.emergency-action')) button.onclick = () => {
@@ -413,7 +413,7 @@ for (const button of document.querySelectorAll('.emergency-action')) button.oncl
   try { queued = navigator.sendBeacon('/api/emergency-exit', new Blob(['{}'], { type: 'application/json' })); } catch {}
   if (!queued) fetch('/api/emergency-exit', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}', keepalive: true }).catch(() => {});
   leaveApp(); $('authPage').hidden = true;
-  window.location.replace('https://www.youtube.com/');
+  window.location.replace('https://www.mobile.de/');
 };
 for (const b of document.querySelectorAll('.close-dialog')) b.onclick = () => b.closest('dialog').close();
 for (const d of document.querySelectorAll('dialog')) d.addEventListener('click', e => { if (e.target === d) { const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close(); } });

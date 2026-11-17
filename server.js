@@ -43,12 +43,13 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
     if (!a.salt || !crypto.timingSafeEqual(crypto.scryptSync(admin.password, a.salt, 64), Buffer.from(a.hash, 'hex'))) {
       a.salt = crypto.randomBytes(16).toString('hex'); a.hash = crypto.scryptSync(admin.password, a.salt, 64).toString('hex'); adminChanged = true;
     }
-    if (a.emergencyDeleteAt) { delete a.emergencyDeleteAt; adminChanged = true; }
+    if (a.emergencyDeleteAt || a.lockedReason) { delete a.emergencyDeleteAt; delete a.lockedReason; delete a.lockedAt; adminChanged = true; }
   }
+  // Emergency exits used to delete accounts after 30 minutes; they now lock them until an admin reactivates them.
+  for (const x of store.users) if (Number.isFinite(x.emergencyDeleteAt)) { if (!isAdmin(x)) { x.suspended = true; x.lockedReason = 'emergency'; x.lockedAt = x.emergencyDeleteAt - 30 * 60 * 1000; } delete x.emergencyDeleteAt; adminChanged = true; }
   const sessions = new Map(), attempts = new Map(), connecting = new Map();
   let writes = Promise.resolve();
-  const emergencyGraceMs = 30 * 60 * 1000;
-  let expiryTimer, expiryWork, closing = false;
+  let closing = false;
   const persist = () => {
     const snapshot = JSON.stringify(store);
     const operation = writes.catch(() => {}).then(async () => {
@@ -102,25 +103,19 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
     const next = store.users.map(u => u.paidUntil).filter(t => t > now());
     if (next.length) { accessTimer = setTimeout(refreshAccess, Math.max(20, Math.min(2147483647, Math.min(...next) - now() + 50))); accessTimer.unref(); }
   }
-  function scheduleExpiry() {
-    clearTimeout(expiryTimer);
-    if (closing) return;
-    const deadlines = store.users.filter(u => Number.isFinite(u.emergencyDeleteAt)).map(u => u.emergencyDeleteAt);
-    if (deadlines.length) {
-      expiryTimer = setTimeout(() => sweepExpiredAccounts().catch(() => {}), Math.max(20, Math.min(2147483647, Math.min(...deadlines) - now())));
-      expiryTimer.unref();
-    }
-  }
-  function sweepExpiredAccounts() {
-    if (expiryWork) return expiryWork;
-    expiryWork = (async () => {
-      for (const u of [...store.users]) if (Number.isFinite(u.emergencyDeleteAt) && u.emergencyDeleteAt <= now() && user(u.id) === u) await deleteAccount(u);
-    })().finally(() => { expiryWork = null; scheduleExpiry(); });
-    return expiryWork;
+  // Emergency exit and emergency sign-in lock the account; only an admin can reactivate it.
+  // The configured main admin is only signed out, because a restart would unlock it anyway.
+  async function emergencyLock(u) {
+    for (const [key, session] of sessions) if (session.userId === u.id) revoke(key);
+    if (u.username === adminName) return;
+    const old = { suspended: u.suspended, lockedReason: u.lockedReason, lockedAt: u.lockedAt };
+    u.suspended = true; u.lockedReason = 'emergency'; u.lockedAt = now();
+    try { await persist(); } catch (e) { Object.assign(u, old); throw e; }
+    refreshAccess(); for (const id of u.friends) update(id);
   }
   const adminView = x => {
     const paid = store.payments.filter(p => p.userId === x.id);
-    return { id: x.id, username: x.username, name: x.name, role: isAdmin(x) ? 'admin' : 'user', envAdmin: x.username === adminName, status: subStatus(x), paidUntil: x.paidUntil || null, createdAt: x.createdAt || null, lastLoginAt: x.lastLoginAt || null, online: online(x.id), friends: x.friends.length, emergencyEnabled: !!x.emergencyHash, deletionAt: x.emergencyDeleteAt || null, note: x.note || '', totalPaid: paid.reduce((sum, p) => sum + p.amount, 0), payments: paid.length, avatar: x.avatar ? `/api/avatar?id=${x.id}&v=${x.avatarVersion}` : null };
+    return { id: x.id, username: x.username, name: x.name, role: isAdmin(x) ? 'admin' : 'user', envAdmin: x.username === adminName, status: subStatus(x), paidUntil: x.paidUntil || null, createdAt: x.createdAt || null, lastLoginAt: x.lastLoginAt || null, online: online(x.id), friends: x.friends.length, emergencyEnabled: !!x.emergencyHash, lockedReason: x.suspended ? x.lockedReason || 'admin' : null, lockedAt: x.suspended ? x.lockedAt || null : null, note: x.note || '', totalPaid: paid.reduce((sum, p) => sum + p.amount, 0), payments: paid.length, avatar: x.avatar ? `/api/avatar?id=${x.id}&v=${x.avatarVersion}` : null };
   };
   const overview = () => {
     const users = store.users.map(adminView), t = now(), monthStart = new Date(t); monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0);
@@ -186,7 +181,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
     if (target.id === me.id) fail(400, 'You cannot do this to your own account.');
     if (route === 'suspend') {
       if (typeof body.suspended !== 'boolean') fail(400, 'Invalid request.');
-      if (body.suspended) target.suspended = true; else delete target.suspended;
+      if (body.suspended) { target.suspended = true; target.lockedReason = 'admin'; target.lockedAt = now(); } else { delete target.suspended; delete target.lockedReason; delete target.lockedAt; }
       await save();
       if (body.suspended) for (const [key, session] of sessions) if (session.userId === target.id) revoke(key);
       return json(200, overview());
@@ -225,7 +220,6 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
       return fs.createReadStream(path.join(__dirname, file)).pipe(res);
     }
     try {
-      await sweepExpiredAccounts();
       if (!['GET', 'POST'].includes(req.method)) fail(405, 'Method not allowed.');
       if (req.method === 'POST' && req.headers.origin && new URL(req.headers.origin).host !== req.headers.host) fail(403, 'Origin not allowed.');
       let body = {};
@@ -263,20 +257,13 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
           try { await persist(); } catch (e) { store.users = store.users.filter(x => x.id !== u.id); throw e; }
         } else {
           const [hash, emergencyHash] = await Promise.all([scrypt(password, u?.salt || 'trinum-dummy-salt', 64), scrypt(password, u?.emergencySalt || 'trinum-emergency-dummy', 64)]);
-          if (u && user(u.id) === u && Number.isFinite(u.emergencyDeleteAt) && u.emergencyDeleteAt <= now()) { await deleteAccount(u); fail(401, 'Incorrect username or password.'); }
           if (u && user(u.id) === u && u.emergencyHash && crypto.timingSafeEqual(emergencyHash, Buffer.from(u.emergencyHash, 'hex'))) {
-            // Persist deletion before invalidating sessions or reporting success.
-            await deleteAccount(u);
+            await emergencyLock(u);
             res.setHeader('Set-Cookie', 'trinum=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
-            return json(200, { accountDeleted: true });
+            return json(200, { accountLocked: true });
           }
           if (!u || user(u.id) !== u || !crypto.timingSafeEqual(hash, Buffer.from(u.hash, 'hex'))) fail(401, 'Incorrect username or password.');
-          if (u.suspended) fail(403, 'This account has been suspended. Contact the administrator.');
-          if (u.emergencyDeleteAt) {
-            const deadline = u.emergencyDeleteAt; delete u.emergencyDeleteAt;
-            try { await persist(); } catch (e) { u.emergencyDeleteAt = deadline; throw e; }
-            scheduleExpiry();
-          }
+          if (u.suspended) fail(403, u.lockedReason === 'emergency' ? 'This account is locked after an emergency exit. Contact the administrator to reactivate it.' : 'This account has been suspended. Contact the administrator.');
         }
         u.lastLoginAt = now(); persist().catch(() => {});
         for (const [token, s] of sessions) if (s.userId === u.id) revoke(token);
@@ -291,12 +278,9 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
       if (!u) fail(401, 'Please sign in again.');
       // Emergency exit must remain available even when ordinary requests are rate limited.
       if (url.pathname === '/api/emergency-exit' && req.method === 'POST') {
-        u.emergencyDeleteAt = now() + emergencyGraceMs;
-        // Revoke immediately; saving the grace-period deadline must not keep a session alive.
-        for (const [key, session] of sessions) if (session.userId === u.id) revoke(key);
         res.setHeader('Set-Cookie', 'trinum=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0');
-        try { await persist(); } finally { scheduleExpiry(); }
-        return json(200, { signedOut: true, deletionScheduledAt: u.emergencyDeleteAt });
+        await emergencyLock(u);
+        return json(200, { signedOut: true, locked: u.username !== adminName });
       }
       if (url.pathname === '/api/events' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
@@ -425,10 +409,9 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
     refreshAccess();
   }, 25000);
   cleanup.unref();
-  sweepExpiredAccounts().catch(() => {});
   if (adminChanged) persist().catch(e => console.error('Could not save the administrator account:', e.message));
   refreshAccess();
-  server.on('close', () => { closing = true; clearInterval(cleanup); clearTimeout(expiryTimer); clearTimeout(accessTimer); }); return server;
+  server.on('close', () => { closing = true; clearInterval(cleanup); clearTimeout(accessTimer); }); return server;
 }
 if (require.main === module) createTrinumServer({
   ...(process.env.DATA_DIR ? { dataFile: path.join(process.env.DATA_DIR, 'accounts.json') } : {}),

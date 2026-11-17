@@ -134,26 +134,27 @@ async function main() {
     await wait(alice, `!document.getElementById('authPage').hidden`, 'sign out before emergency login');
     await evaluate(alice, `document.getElementById('username').value=${JSON.stringify('aria_' + suffix)};document.getElementById('password').value=${JSON.stringify(emergency)};`);
     await click(alice, '#authSubmit');
-    await wait(alice, `document.getElementById('toastText').textContent === 'Your account has been permanently deleted.'`, 'emergency login deletes account');
+    await wait(alice, `document.getElementById('toastText').textContent === 'This account is locked. Contact the administrator to reactivate it.'`, 'emergency login locks account');
     assert.ok(await evaluate(alice, `document.getElementById('workspace').hidden`), 'Emergency login does not open a session');
     assert.ok(await evaluate(alice, `document.getElementById('emergencyBar').hidden`), 'Emergency action hidden when signed out');
-    // Block external loading while verifying immediate replacement navigation to YouTube.
-    await cdp('Network.enable', {}, bob); await cdp('Network.setBlockedURLs', { urls: ['*://www.youtube.com/*'] }, bob);
+    // Block external loading while verifying immediate replacement navigation to mobile.de.
+    await cdp('Network.enable', {}, bob); await cdp('Network.setBlockedURLs', { urls: ['*://www.mobile.de/*'] }, bob);
     await click(bob, '#backToList'); await click(bob, '#mobileProfile');
     await click(bob, '#profileDialog .dialog-emergency');
-    const exitDeadline = Date.now() + 10000; while (!navigationRequests.includes('https://www.youtube.com/') && Date.now() < exitDeadline) await delay(100);
-    assert.ok(navigationRequests.includes('https://www.youtube.com/'), 'Emergency button immediately redirects to YouTube');
+    const exitDeadline = Date.now() + 10000; while (!navigationRequests.includes('https://www.mobile.de/') && Date.now() < exitDeadline) await delay(100);
+    assert.ok(navigationRequests.includes('https://www.mobile.de/'), 'Emergency button immediately redirects to mobile.de');
     const graceDeadline = Date.now() + 5000; let remaining;
-    do { remaining = JSON.parse(await fs.readFile(path.join(temp, 'accounts.json'), 'utf8')).users.find(u => u.username === 'elio_' + suffix); if (remaining?.emergencyDeleteAt) break; await delay(100); } while (Date.now() < graceDeadline);
-    assert.ok(remaining?.emergencyDeleteAt > Date.now(), 'Navigation keepalive request persisted the grace period');
+    do { remaining = JSON.parse(await fs.readFile(path.join(temp, 'accounts.json'), 'utf8')).users.find(u => u.username === 'elio_' + suffix); if (remaining?.lockedReason) break; await delay(100); } while (Date.now() < graceDeadline);
+    assert.equal(remaining?.lockedReason, 'emergency', 'Navigation keepalive request locked the account');
     await cdp('Page.navigate', { url: origin }, bob);
     await wait(bob, `document.getElementById('authPage') && !document.getElementById('authPage').hidden`, 'Returning after emergency exit requires sign-in');
     assert.equal(await evaluate(bob, `fetch('/api/me').then(r=>r.status)`), 401, 'Session revoked despite immediate navigation');
     await evaluate(bob, `document.getElementById('username').value=${JSON.stringify('elio_' + suffix)};document.getElementById('password').value=${JSON.stringify(password)};`);
-    await click(bob, '#authSubmit'); await wait(bob, `!document.getElementById('workspace').hidden`, 'Normal login recovers account within grace period');
+    await click(bob, '#authSubmit'); await wait(bob, `!document.getElementById('authError').hidden && document.getElementById('authError').textContent.includes('locked')`, 'Locked account cannot sign in');
+    assert.ok(await evaluate(bob, `document.getElementById('workspace').hidden`), 'Locked account stays signed out');
     assert.deepEqual(errors, [], 'No browser JavaScript errors');
-    const stored = await fs.readFile(path.join(temp, 'accounts.json'), 'utf8'); assert.ok(!stored.includes('Hey!')); assert.ok(!stored.includes('Always.')); assert.ok(!stored.includes('aria_' + suffix)); assert.ok(stored.includes('elio_' + suffix)); assert.ok(!stored.includes('emergencyDeleteAt')); assert.ok(!stored.includes(emergency));
-    console.log('PASS: login, registration, search, invitations, WebRTC messages, mobile layouts, avatar upload, emergency password setup and destructive login on a temporary test account; screenshots in .artifacts/');
+    const stored = await fs.readFile(path.join(temp, 'accounts.json'), 'utf8'); assert.ok(!stored.includes('Hey!')); assert.ok(!stored.includes('Always.')); assert.ok(stored.includes('aria_' + suffix)); assert.ok(stored.includes('elio_' + suffix)); assert.ok(!stored.includes('emergencyDeleteAt')); assert.ok(!stored.includes(emergency));
+    console.log('PASS: login, registration, search, invitations, WebRTC messages, mobile layouts, avatar upload, emergency password setup and emergency lock on a temporary test account; screenshots in .artifacts/');
     await cdp('Browser.close').catch(() => {});
   } finally {
     ws?.close(); if (chrome && !chrome.killed) chrome.kill();

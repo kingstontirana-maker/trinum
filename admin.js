@@ -83,7 +83,7 @@ function renderStats() {
     ['soon', 'Expiring ≤ 7 days', s.expiringSoon, 'Need renewal soon', 'soon'],
     ['expired', 'Expired', s.expired, 'Access locked', 'expired'],
     ['pending', 'Pending', s.pending, 'Never paid', 'pending'],
-    ['suspended', 'Suspended', s.suspended, 'Blocked by admin', 'suspended'],
+    ['suspended', 'Suspended', s.suspended, 'Blocked or emergency exit', 'suspended'],
     [null, 'Monthly recurring', money(s.mrr), s.active + ' × ' + money(data.price), null, true],
     [null, 'Revenue this month', money(s.revenueMonth), 'Recorded payments', null, true],
     [null, 'Total revenue', money(s.revenue), data.payments.length + ' payments', null, true]
@@ -133,7 +133,7 @@ function renderUsers() {
     if (u.note) names.append(el('span', 'note', u.note));
     who.append(avatar(u), names);
     const badge = el('span', 'badge ' + u.status); badge.append(el('i', 'dot ' + u.status), statusLabel[u.status]);
-    if (u.deletionAt) badge.title = 'Emergency deletion scheduled ' + dateTime(u.deletionAt);
+    if (u.lockedReason === 'emergency') { badge.lastChild.textContent = 'Locked · emergency'; badge.title = 'Emergency exit ' + (u.lockedAt ? dateTime(u.lockedAt) : '') + '. Open Manage → Reactivate.'; }
     const expires = el('div');
     if (u.status === 'admin') expires.append(el('span', 'when muted', 'No expiry'));
     else if (u.paidUntil) { expires.append(el('span', 'when', date(u.paidUntil)), el('span', 'sub' + (u.paidUntil < Date.now() ? ' late' : isSoon(u) ? ' soon' : ''), relative(u.paidUntil))); }
@@ -221,7 +221,7 @@ function renderManage(u) {
     ['Joined', dateTime(u.createdAt)],
     ['Friends', String(u.friends)],
     ['Emergency password', u.emergencyEnabled ? 'Enabled' : 'Not set'],
-    ['Emergency deletion', u.deletionAt ? dateTime(u.deletionAt) : 'None scheduled']
+    ['Blocked', u.lockedReason ? (u.lockedReason === 'emergency' ? 'Emergency exit' : 'By admin') + (u.lockedAt ? ' · ' + dateTime(u.lockedAt) : '') : 'No']
   ];
   for (const [label, value] of items) { const d = el('div'); const s = el('strong'); s.append(value); d.append(el('span', '', label), s); summary.append(d); }
   const isAdmin = u.status === 'admin';
@@ -229,7 +229,7 @@ function renderManage(u) {
   if (u.paidUntil) $('expiryInput').value = toLocalInput(u.paidUntil); else $('expiryInput').value = '';
   $('expireNow').hidden = !(u.paidUntil > Date.now()); $('clearExpiry').hidden = !u.paidUntil;
   $('extSubmit').textContent = (u.status === 'active' ? 'Extend' : 'Activate') + ' subscription';
-  $('suspendUser').textContent = u.status === 'suspended' ? 'Unsuspend' : 'Suspend';
+  $('suspendUser').textContent = u.status === 'suspended' ? 'Reactivate account' : 'Suspend';
   $('suspendUser').hidden = u.envAdmin;
   $('roleUser').textContent = isAdmin ? 'Remove admin role' : 'Make admin'; $('roleUser').hidden = u.envAdmin;
   $('signOutUser').hidden = u.envAdmin;
@@ -266,7 +266,7 @@ $('signOutUser').onclick = () => act('sign-out', {}, 'User signed out on all dev
 $('suspendUser').onclick = () => {
   const u = data.users.find(x => x.id === selectedId), suspend = u.status !== 'suspended';
   if (suspend && !confirm('Suspend ' + u.name + '? They are signed out and cannot sign in.')) return;
-  act('suspend', { suspended: suspend }, suspend ? 'Account suspended.' : 'Account unsuspended.', $('suspendUser'));
+  act('suspend', { suspended: suspend }, suspend ? 'Account suspended.' : 'Account reactivated.', $('suspendUser'));
 };
 $('roleUser').onclick = () => {
   const u = data.users.find(x => x.id === selectedId), makeAdmin = u.status !== 'admin';
