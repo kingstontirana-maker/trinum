@@ -137,11 +137,11 @@ async function main() {
     assert.ok(await evaluate(bob, `TrinumVoiceFx.current === 'child' && document.getElementById('callVoiceLabel').textContent === 'Child' && [...TrinumVoiceFx.chains][0].pitch.parameters.get('ratio').value > 1.7`), 'Voice button switches to the child voice');
     const pitches = await evaluate(bob, `(async () => {
       const out = {};
-      for (const [name, ratio, formant] of [['deep', 0.88, 0], ['female', 1.5, 1.15], ['child', 1.8, 1.28]]) {
+      for (const [name, ratio, formant] of [['deep', 0.88, 0.95], ['female', 1.5, 1.15], ['child', 1.8, 1.28]]) {
         const ctx = new OfflineAudioContext(1, 48000, 48000); await ctx.audioWorklet.addModule('voice-fx.js');
         const osc = ctx.createOscillator(); osc.frequency.value = 220; const node = new AudioWorkletNode(ctx, 'trinum-pitch'); node.parameters.get('ratio').value = ratio; node.parameters.get('formant').value = formant;
         osc.connect(node); node.connect(ctx.destination); osc.start(); const data = (await ctx.startRendering()).getChannelData(0);
-        let best = 0, bestLag = 0; for (let lag = 40; lag < 400; lag++) { let sum = 0; for (let i = 8000; i < 40000; i++) sum += data[i] * data[i + lag]; if (sum > best) { best = sum; bestLag = lag; } }
+        const sums = []; for (let lag = 0; lag < 400; lag++) { let sum = 0; for (let i = 8000; i < 40000; i++) sum += data[i] * data[i + lag]; sums.push(sum); } const top = Math.max(...sums.slice(40)); let bestLag = 40; for (let lag = 41; lag < 399; lag++) if (sums[lag] > 0.8 * top && sums[lag] >= sums[lag - 1] && sums[lag] >= sums[lag + 1]) { bestLag = lag; break; }
         out[name] = 48000 / bestLag;
       }
       return out; })()`);

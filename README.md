@@ -87,4 +87,4 @@ Printing, saving the page, the context menu, copying messages and dragging image
 
 ## Voice changer
 
-In the profile ("Your voice in calls and voice messages") or with the voice button during a call, each user picks Normal, Deep, Female or Child. The microphone runs through a real-time pitch shifter (`voice-fx.js`, an AudioWorklet; Female and Child use a formant-preserving phase vocoder so they sound natural rather than sped up) before it reaches the call or a voice message, so the other person only hears the changed voice. The choice is remembered on that device; "Test my voice" records three seconds and plays them back.
+In the profile ("Your voice in calls and voice messages") or with the voice button during a call, each user picks Normal, Deep, Female or Child. The microphone runs through a real-time pitch shifter (`voice-fx.js`, an AudioWorklet; all voices use pitch-synchronous overlap-add, so they sound natural, without a sped-up or metallic sound) before it reaches the call or a voice message, so the other person only hears the changed voice. The choice is remembered on that device; "Test my voice" records three seconds and plays them back.
