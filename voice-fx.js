@@ -36,7 +36,7 @@ if (typeof registerProcessor === 'function') {
     constructor() {
       this.presets = {
         normal: { label: 'Normal', ratio: 1, low: 0, high: 0, cut: 20 },
-        deep: { label: 'Deep', ratio: 0.84, low: 1, high: 3, cut: 70 },
+        deep: { label: 'Deep', ratio: 0.88, low: 1, high: 3, cut: 70 },
         female: { label: 'Female', ratio: 1.38, low: -3, high: 2, cut: 140 },
         child: { label: 'Child', ratio: 1.72, low: -6, high: 4, cut: 230 }
       };

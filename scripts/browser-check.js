@@ -137,7 +137,7 @@ async function main() {
     assert.ok(await evaluate(bob, `TrinumVoiceFx.current === 'child' && document.getElementById('callVoiceLabel').textContent === 'Child' && [...TrinumVoiceFx.chains][0].pitch.parameters.get('ratio').value > 1.7`), 'Voice button switches to the child voice');
     const pitches = await evaluate(bob, `(async () => {
       const out = {};
-      for (const [name, ratio] of [['deep', 0.84], ['female', 1.38], ['child', 1.72]]) {
+      for (const [name, ratio] of [['deep', 0.88], ['female', 1.38], ['child', 1.72]]) {
         const ctx = new OfflineAudioContext(1, 48000, 48000); await ctx.audioWorklet.addModule('voice-fx.js');
         const osc = ctx.createOscillator(); osc.frequency.value = 220; const node = new AudioWorkletNode(ctx, 'trinum-pitch'); node.parameters.get('ratio').value = ratio;
         osc.connect(node); node.connect(ctx.destination); osc.start(); const data = (await ctx.startRendering()).getChannelData(0);
@@ -145,7 +145,7 @@ async function main() {
         out[name] = 48000 / bestLag;
       }
       return out; })()`);
-    assert.ok(Math.abs(pitches.deep - 220 * 0.84) < 12 && Math.abs(pitches.female - 220 * 1.38) < 15 && Math.abs(pitches.child - 220 * 1.72) < 20, 'Pitch shifter output: ' + JSON.stringify(pitches));
+    assert.ok(Math.abs(pitches.deep - 220 * 0.88) < 12 && Math.abs(pitches.female - 220 * 1.38) < 15 && Math.abs(pitches.child - 220 * 1.72) < 20, 'Pitch shifter output: ' + JSON.stringify(pitches));
     await screenshot(bob, 'call-voice-child');
     await evaluate(bob, `TrinumVoiceFx.set('normal')`);
     await click(bob, '#callMute'); assert.ok(await evaluate(bob, `calls.call.local.getAudioTracks()[0].enabled === false && document.getElementById('callMute').classList.contains('off')`), 'Mute disables the microphone');
