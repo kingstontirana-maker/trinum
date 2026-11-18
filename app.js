@@ -468,3 +468,29 @@ document.addEventListener('copy', e => { if (account && !e.target.closest?.('inp
 document.addEventListener('dragstart', e => { if (account && e.target.closest?.('img,video')) e.preventDefault(); });
 window.addEventListener('beforeprint', () => { if (account) captureAttempt(4000); });
 $('privacyShield').onclick = () => { privacy.captureUntil = 0; privacy.keys = false; window.focus(); updatePrivacy(); };
+
+// Voice changer picker (profile) and the voice button in calls.
+function renderVoice() {
+  const fx = window.TrinumVoiceFx; if (!fx) return;
+  for (const b of document.querySelectorAll('[data-voice]')) { const on = b.dataset.voice === fx.current; b.classList.toggle('active', on); b.setAttribute('aria-checked', String(on)); }
+  $('callVoiceLabel').textContent = fx.label; $('callVoice').classList.toggle('changed', fx.current !== 'normal');
+}
+for (const b of document.querySelectorAll('[data-voice]')) b.onclick = () => window.TrinumVoiceFx?.set(b.dataset.voice);
+window.TrinumVoiceFx?.onChange(renderVoice); renderVoice();
+$('voiceTest').onclick = async () => {
+  const button = $('voiceTest'); if (button.disabled) return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return toast('Voice test needs HTTPS and a browser with microphone support.');
+  button.disabled = true;
+  let stream;
+  try {
+    stream = await TrinumVoiceFx.process(await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }));
+    const chunks = [], recorder = new MediaRecorder(stream); recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+    const done = new Promise(resolve => recorder.onstop = resolve);
+    recorder.start(); for (let s = 3; s > 0; s--) { button.textContent = 'Speak now… ' + s; await new Promise(r => setTimeout(r, 1000)); }
+    recorder.stop(); await done; stream.getTracks().forEach(t => t.stop()); stream = null;
+    const url = URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType })), audio = new Audio(url);
+    button.textContent = 'Playing…'; await audio.play().catch(() => {}); await new Promise(r => { audio.onended = r; audio.onerror = r; setTimeout(r, 6000); });
+    URL.revokeObjectURL(url);
+  } catch (e) { toast(e?.name === 'NotAllowedError' ? 'Allow microphone access to test your voice.' : 'Could not test your voice.'); }
+  finally { stream?.getTracks().forEach(t => t.stop()); button.disabled = false; button.textContent = 'Test my voice'; }
+};

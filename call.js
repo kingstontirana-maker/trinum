@@ -10,6 +10,7 @@ class TrinumCalls {
     $('callDecline').onclick = () => this.hangup();
     $('callEnd').onclick = () => this.hangup();
     $('callMute').onclick = () => this.toggle('audio');
+    $('callVoice').onclick = () => { if (!window.TrinumVoiceFx) return; TrinumVoiceFx.next(); this.toast('Your voice: ' + TrinumVoiceFx.label); };
     $('callCamera').onclick = () => this.toggle('video');
     $('callFlip').onclick = () => this.flip().catch(() => this.toast('Could not switch the camera.'));
   }
@@ -19,9 +20,10 @@ class TrinumCalls {
   async media(video, facing = 'user') {
     if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw Error('Calls need HTTPS and a browser with camera and microphone support.');
     const audio = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
-    try { return await navigator.mediaDevices.getUserMedia({ audio, video: video ? { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } } : false }); }
+    const changed = s => window.TrinumVoiceFx ? TrinumVoiceFx.process(s) : s;
+    try { return await changed(await navigator.mediaDevices.getUserMedia({ audio, video: video ? { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } } : false })); }
     catch (e) {
-      if (video) { try { const s = await navigator.mediaDevices.getUserMedia({ audio }); this.toast('Camera unavailable. Continuing with voice only.'); return s; } catch {} }
+      if (video) { try { const s = await navigator.mediaDevices.getUserMedia({ audio }); this.toast('Camera unavailable. Continuing with voice only.'); return await changed(s); } catch {} }
       throw Error(e?.name === 'NotAllowedError' ? 'Allow microphone' + (video ? ' and camera' : '') + ' access in your browser to call.' : 'No microphone' + (video ? ' or camera' : '') + ' was found.');
     }
   }

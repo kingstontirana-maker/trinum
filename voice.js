@@ -7,7 +7,8 @@ window.TrinumVoice = class TrinumVoice {
   async start(peer, tick, stopped) {
     this.clearDraft(); const generation = ++this.generation;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) throw Error('Voice recording requires HTTPS or localhost and a supported browser.');
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (window.TrinumVoiceFx && generation === this.generation) stream = await TrinumVoiceFx.process(stream);
     if (generation !== this.generation) { stream.getTracks().forEach(t => t.stop()); throw Error('Recording cancelled.'); }
     try {
       const mime = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'].find(x => MediaRecorder.isTypeSupported(x));

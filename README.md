@@ -84,3 +84,7 @@ A web page cannot stop the operating system from taking a screenshot, so Trinum 
 - PrintScreen is pressed (the clipboard is also overwritten).
 
 Printing, saving the page, the context menu, copying messages and dragging images are disabled. The emergency exit bar always stays visible. Screenshots taken with a phone's hardware buttons cannot be detected by a website.
+
+## Voice changer
+
+In the profile ("Your voice in calls and voice messages") or with the voice button during a call, each user picks Normal, Deep, Female or Child. The microphone runs through a real-time pitch shifter (`voice-fx.js`, an AudioWorklet) before it reaches the call or a voice message, so the other person only hears the changed voice. The choice is remembered on that device; "Test my voice" records three seconds and plays them back.

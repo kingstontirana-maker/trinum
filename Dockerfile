@@ -2,7 +2,7 @@ FROM node:22-alpine
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000 DATA_DIR=/data COOKIE_SECURE=1
 COPY package.json ./
-COPY server.js index.html app.js voice.js call.js style.css platform.css admin.html admin.js admin.css ./
+COPY server.js index.html app.js voice.js voice-fx.js call.js style.css platform.css admin.html admin.js admin.css ./
 COPY assets ./assets
 RUN mkdir -p /data && chown node:node /data
 USER node

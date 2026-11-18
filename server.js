@@ -213,7 +213,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
     const json = (code, data) => { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
     const fail = (code, message) => { const e = new Error(message); e.status = code; throw e; };
     if (!url.pathname.startsWith('/api/')) {
-      const file = { '/': 'index.html', '/index.html': 'index.html', '/style.css': 'style.css', '/platform.css': 'platform.css', '/assets/chat-landscape.svg': 'assets/chat-landscape.svg', '/voice.js': 'voice.js', '/call.js': 'call.js', '/app.js': 'app.js', '/admin': 'admin.html', '/admin/': 'admin.html', '/admin.js': 'admin.js', '/admin.css': 'admin.css' }[url.pathname];
+      const file = { '/': 'index.html', '/index.html': 'index.html', '/style.css': 'style.css', '/platform.css': 'platform.css', '/assets/chat-landscape.svg': 'assets/chat-landscape.svg', '/voice.js': 'voice.js', '/voice-fx.js': 'voice-fx.js', '/call.js': 'call.js', '/app.js': 'app.js', '/admin': 'admin.html', '/admin/': 'admin.html', '/admin.js': 'admin.js', '/admin.css': 'admin.css' }[url.pathname];
       if (!file) return json(404, { error: 'Not found.' });
       res.setHeader('Content-Security-Policy', "default-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self' blob:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
       res.setHeader('Content-Type', file.endsWith('.css') ? 'text/css; charset=utf-8' : file.endsWith('.svg') ? 'image/svg+xml' : file.endsWith('.js') ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8');

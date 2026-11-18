@@ -131,6 +131,23 @@ async function main() {
     await screenshot(alice, 'call-incoming-mobile');
     await click(alice, '#callAccept');
     for (const [who, name] of [[alice, 'Aria'], [bob, 'Bob']]) await wait(who, `document.getElementById('callView').classList.contains('phase-active') && document.getElementById('remoteVideo').videoWidth > 0 && document.getElementById('localVideo').videoWidth > 0`, name + ' sees live video');
+    // Voice changer: the call sends the processed track, and the voice button switches presets live.
+    assert.ok(await evaluate(bob, `TrinumVoiceFx.chains.size === 1 && calls.call.local.getAudioTracks()[0].label !== 'Fake Default Audio Input'`), 'Call audio goes through the voice changer');
+    await click(bob, '#callVoice'); await click(bob, '#callVoice'); await click(bob, '#callVoice');
+    assert.ok(await evaluate(bob, `TrinumVoiceFx.current === 'child' && document.getElementById('callVoiceLabel').textContent === 'Child' && [...TrinumVoiceFx.chains][0].pitch.parameters.get('ratio').value > 1.7`), 'Voice button switches to the child voice');
+    const pitches = await evaluate(bob, `(async () => {
+      const out = {};
+      for (const [name, ratio] of [['deep', 0.72], ['female', 1.38], ['child', 1.72]]) {
+        const ctx = new OfflineAudioContext(1, 48000, 48000); await ctx.audioWorklet.addModule('voice-fx.js');
+        const osc = ctx.createOscillator(); osc.frequency.value = 220; const node = new AudioWorkletNode(ctx, 'trinum-pitch'); node.parameters.get('ratio').value = ratio;
+        osc.connect(node); node.connect(ctx.destination); osc.start(); const data = (await ctx.startRendering()).getChannelData(0);
+        let best = 0, bestLag = 0; for (let lag = 40; lag < 400; lag++) { let sum = 0; for (let i = 8000; i < 40000; i++) sum += data[i] * data[i + lag]; if (sum > best) { best = sum; bestLag = lag; } }
+        out[name] = 48000 / bestLag;
+      }
+      return out; })()`);
+    assert.ok(Math.abs(pitches.deep - 220 * 0.72) < 12 && Math.abs(pitches.female - 220 * 1.38) < 15 && Math.abs(pitches.child - 220 * 1.72) < 20, 'Pitch shifter output: ' + JSON.stringify(pitches));
+    await screenshot(bob, 'call-voice-child');
+    await evaluate(bob, `TrinumVoiceFx.set('normal')`);
     await click(bob, '#callMute'); assert.ok(await evaluate(bob, `calls.call.local.getAudioTracks()[0].enabled === false && document.getElementById('callMute').classList.contains('off')`), 'Mute disables the microphone');
     await delay(1200); await screenshot(bob, 'call-video-mobile'); await size(bob, 1440, 1000); await screenshot(bob, 'call-video-desktop'); await size(bob, 390);
     await click(alice, '#callEnd');
@@ -147,7 +164,7 @@ async function main() {
     await screenshot(alice, 'call-voice-mobile'); await click(bob, '#callEnd');
     await wait(alice, `document.getElementById('callView').hidden`, 'voice call ended');
     await click(alice, '#backToList');
-    await click(alice, '#mobileProfile'); await click(alice, '#openSecurity');
+    await click(alice, '#mobileProfile'); await click(alice, '[data-voice="deep"]'); assert.ok(await evaluate(alice, `TrinumVoiceFx.current === 'deep' && document.querySelector('[data-voice="deep"]').getAttribute('aria-checked') === 'true'`), 'Profile voice picker'); await screenshot(alice, 'voice-picker'); await click(alice, '[data-voice="normal"]'); await click(alice, '#openSecurity');
     const emergency = 'temporary-emergency-789';
     await evaluate(alice, `document.getElementById('securityCurrent').value=${JSON.stringify(password)};document.getElementById('securityEmergency').value=${JSON.stringify(emergency)};document.getElementById('securityConfirm').value=${JSON.stringify(emergency)};document.getElementById('securityAcknowledge').checked=true;`);
     await screenshot(alice, 'security-mobile'); await click(alice, '#saveEmergency');
