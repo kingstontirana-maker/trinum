@@ -74,7 +74,7 @@ Strict networks (some mobile carriers, corporate Wi-Fi) can block direct connect
 
 ## Offline delivery
 
-Messages and voice messages can be sent at any time. While a direct WebRTC channel is open they travel peer to peer. Otherwise they go through the server: they are held in `mail.json` (next to `accounts.json`) only until the recipient's browser receives and acknowledges them, then deleted. The recipient gets them live if Trinum is open, or the next time they open it. Undelivered messages are readable by the server operator while they wait; they are not end-to-end encrypted. Messages are only accepted between friends.
+Messages and voice messages can be sent at any time. While a direct WebRTC channel is open they travel peer to peer. Otherwise they go through the server, which holds them **only in memory**: no message is ever written to disk or to the database. A message is deleted as soon as the recipient's browser receives and acknowledges it, after 7 days, or when the server restarts (undelivered messages are then lost). The recipient gets them live if Trinum is open, or the next time they open it while the server is still running. While they wait, undelivered messages are in the server's memory and are not end-to-end encrypted. A `mail.json` left by an older version is loaded into memory once and deleted. Messages are only accepted between friends.
 
 ## Screenshot protection
 

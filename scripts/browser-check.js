@@ -123,7 +123,7 @@ async function main() {
     await wait(alice, `document.getElementById('toastText').textContent === 'New message from Elio Deda'`, 'offline message delivered on sign-in');
     await click(alice, '#listContent .person-row');
     await wait(alice, `document.getElementById('messages').textContent.includes('Sent while you were away') && document.querySelector('#messages audio')?.readyState >= 1`, 'offline text and voice delivered');
-    await delay(500); assert.equal(JSON.parse(await fs.readFile(path.join(temp, 'mail.json'), 'utf8')).length, 0, 'Delivered messages removed from the server');
+    await delay(500); assert.equal(server.pendingMail(), 0, 'Delivered messages removed from the server'); assert.equal(await fs.stat(path.join(temp, 'mail.json')).then(() => true, () => false), false, 'Messages are never written to disk');
     // Video call: Bob calls, Aria answers, both see live video, Aria hangs up.
     await wait(bob, `document.getElementById('chatStatus').classList.contains('connected')`, 'chat reconnected before call');
     await click(bob, '#videoCall');

@@ -14,20 +14,15 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
   let store = { users: [], requests: [], payments: [] };
   if (fs.existsSync(dataFile)) store = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
   store.payments ||= [];
-  // Mailbox for messages sent while no direct WebRTC channel is open. Each item is
-  // deleted as soon as the recipient's browser acknowledges it.
-  const mailFile = path.join(path.dirname(dataFile), 'mail.json');
-  let mail = fs.existsSync(mailFile) ? JSON.parse(fs.readFileSync(mailFile, 'utf8')) : [];
-  let mailWrites = Promise.resolve();
-  const persistMail = () => {
-    const snapshot = JSON.stringify(mail);
-    const operation = mailWrites.catch(() => {}).then(async () => {
-      await fs.promises.mkdir(path.dirname(mailFile), { recursive: true });
-      await fs.promises.writeFile(mailFile + '.tmp', snapshot, { mode: 0o600 });
-      await fs.promises.rename(mailFile + '.tmp', mailFile);
-    });
-    mailWrites = operation; return operation;
-  };
+  // Mailbox for messages sent while no direct WebRTC channel is open. It lives only in memory:
+  // messages are never written to disk or to the database. Each item is deleted as soon as the
+  // recipient's browser acknowledges it, after 7 days, or when the server restarts.
+  const mailTtl = 7 * 86400000;
+  let mail = [];
+  // Older versions kept the mailbox in mail.json: load anything still waiting, then delete the file.
+  const legacyMail = path.join(path.dirname(dataFile), 'mail.json');
+  try { if (fs.existsSync(legacyMail)) { const old = JSON.parse(fs.readFileSync(legacyMail, 'utf8')); if (Array.isArray(old)) mail = old; } } catch {}
+  for (const f of [legacyMail, legacyMail + '.tmp']) try { fs.rmSync(f, { force: true }); } catch {}
   const isAdmin = u => u?.role === 'admin';
   // Status is derived from the stored deadline, so expiry needs no write.
   const subStatus = u => isAdmin(u) ? 'admin' : u.suspended ? 'suspended' : !subscriptions ? 'active' : u.paidUntil > now() ? 'active' : u.paidUntil ? 'expired' : 'pending';
@@ -82,7 +77,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
     store.users = store.users.filter(x => x.id !== deletedId);
     for (const other of store.users) other.friends = other.friends.filter(id => id !== deletedId);
     store.requests = store.requests.filter(r => r.from !== deletedId && r.to !== deletedId);
-    mail = mail.filter(m => m.from !== deletedId && m.to !== deletedId); persistMail().catch(() => {});
+    mail = mail.filter(m => m.from !== deletedId && m.to !== deletedId);
     try { await persist(); } catch (e) { store = previous; throw e; }
     for (const [token, session] of sessions) if (session.userId === deletedId) revoke(token);
     for (const key of connecting.keys()) if (key.split(':').includes(deletedId)) connecting.delete(key);
@@ -371,7 +366,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
         if (!Array.isArray(body.ids) || body.ids.length > 1000) fail(400, 'Invalid request.');
         const ids = new Set(body.ids.map(String)), done = mail.filter(m => m.to === u.id && ids.has(m.id));
         if (done.length) {
-          mail = mail.filter(m => !done.includes(m)); await persistMail();
+          mail = mail.filter(m => !done.includes(m));
           for (const m of done) emit(m.from, 'delivered', { id: m.id, to: u.id });
         }
         return json(200, {});
@@ -406,7 +401,7 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
           if (typeof body.text !== 'string' || !body.text.trim() || body.text.length > 16000) fail(400, 'Write a message.');
           m.text = body.text;
         }
-        mail.push(m); await persistMail();
+        mail.push(m);
         emit(target.id, 'mail', m);
         return json(200, { id: m.id, at: m.at, delivered: false });
       }
@@ -430,7 +425,9 @@ function createTrinumServer({ dataFile = path.join(__dirname, '.data', 'accounts
   cleanup.unref();
   if (adminChanged) persist().catch(e => console.error('Could not save the administrator account:', e.message));
   refreshAccess();
-  server.on('close', () => { closing = true; clearInterval(cleanup); clearTimeout(accessTimer); }); return server;
+  const mailSweep = setInterval(() => { const cutoff = now() - mailTtl; mail = mail.filter(m => m.at > cutoff); }, 3600000); mailSweep.unref?.();
+  server.pendingMail = () => mail.length;
+  server.on('close', () => { closing = true; clearInterval(mailSweep); clearInterval(cleanup); clearTimeout(accessTimer); }); return server;
 }
 if (require.main === module) createTrinumServer({
   ...(process.env.DATA_DIR ? { dataFile: path.join(process.env.DATA_DIR, 'accounts.json') } : {}),

@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { createTrinumServer } = require('./server');
 
-test('messages reach friends who are offline and leave the server once delivered', { timeout: 30000 }, async t => {
+test('messages reach friends who are offline, are never written to disk and leave the server once delivered', { timeout: 30000 }, async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'trinum-mail-')), dataFile = path.join(dir, 'accounts.json'), mailFile = path.join(dir, 'mail.json');
   let server, base; const streams = [];
   async function start() { server = createTrinumServer({ dataFile, subscriptions: false }); await new Promise(r => server.listen(0, '127.0.0.1', r)); base = 'http://127.0.0.1:' + server.address().port; }
@@ -27,7 +27,8 @@ test('messages reach friends who are offline and leave the server once delivered
     } };
     streams.push(s); return s;
   }
-  const saved = async () => JSON.parse(await fs.readFile(mailFile, 'utf8'));
+  const saved = async () => server.pendingMail();
+  const onDisk = async () => { const names = await fs.readdir(dir); return names.filter(n => n !== 'accounts.json' && !n.startsWith('accounts.json')); };
   try {
     await start();
     const a = await call('register', { username: 'mila', name: 'Mila', password: '1' }), b = await call('register', { username: 'noah', name: 'Noah', password: '1' }), c = await call('register', { username: 'zed', name: 'Zed', password: '1' });
@@ -40,13 +41,15 @@ test('messages reach friends who are offline and leave the server once delivered
       assert.equal((await call('relay', { to: noah, text: '   ' }, a.cookie)).status, 400);
     });
 
-    await t.test('offline recipient: messages wait, survive a restart and arrive in order', async () => {
+    await t.test('offline recipient: messages wait in memory only and arrive in order', async () => {
       for (const text of ['one', 'two', 'three']) assert.equal((await call('relay', { to: noah, text }, a.cookie)).status, 200);
       const audio = Buffer.from('fake-audio-bytes').toString('base64');
       assert.equal((await call('relay', { to: noah, voice: { mime: 'audio/ogg; codecs=opus', duration: 2.5, data: audio } }, a.cookie)).status, 200);
       assert.equal((await call('relay', { to: noah, voice: { mime: 'text/html', duration: 1, data: audio } }, a.cookie)).status, 400);
-      assert.equal((await saved()).length, 4);
-      await stop(); await start();
+      assert.equal(await saved(), 4);
+      await new Promise(r => setTimeout(r, 200));
+      assert.deepEqual(await onDisk(), [], 'No message file is written');
+      const stored = await fs.readFile(dataFile, 'utf8'); assert.ok(!stored.includes('three') && !stored.includes(audio), 'No message text in the database');
       const noahLogin = await call('login', { username: 'noah', password: '1' });
       const s = await stream(noahLogin.cookie);
       const got = [await s.next('mail'), await s.next('mail'), await s.next('mail'), await s.next('mail')];
@@ -56,7 +59,7 @@ test('messages reach friends who are offline and leave the server once delivered
       await ms.next('state');
       assert.equal((await call('ack', { ids: got.map(m => m.id) }, noahLogin.cookie)).status, 200);
       assert.equal((await ms.next('delivered')).to, noah);
-      assert.equal((await saved()).length, 0);
+      assert.equal(await saved(), 0);
       // Acknowledged messages are not sent again on reconnect.
       s.controller.abort(); const again = await stream(noahLogin.cookie); await again.next('state');
       await call('relay', { to: noah, text: 'live' }, milaLogin.cookie);
@@ -64,8 +67,16 @@ test('messages reach friends who are offline and leave the server once delivered
     });
 
     await t.test('other users cannot acknowledge someone else’s mail', async () => {
-      const pending = await saved(); assert.equal(pending.length, 1);
-      await call('ack', { ids: [pending[0].id] }, c.cookie); assert.equal((await saved()).length, 1);
+      assert.equal(await saved(), 1);
+      const noahLogin = await call('login', { username: 'noah', password: '1' }), s = await stream(noahLogin.cookie), pending = await s.next('mail');
+      await call('ack', { ids: [pending.id] }, c.cookie); assert.equal(await saved(), 1);
+    });
+
+    await t.test('a restart forgets undelivered messages and removes an old mail.json', async () => {
+      await stop(); await fs.writeFile(mailFile, JSON.stringify([{ id: 'old1', from: mila, to: noah, at: Date.now(), text: 'legacy' }]));
+      await start();
+      assert.equal(await saved(), 1, 'Old stored message moved into memory');
+      assert.equal(await fs.stat(mailFile).then(() => true, () => false), false, 'mail.json deleted');
     });
   } finally { await stop().catch(() => {}); await fs.rm(dir, { recursive: true, force: true }); }
 });
