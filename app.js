@@ -408,7 +408,7 @@ $('disableEmergency').onclick = () => saveSecurity(true);
 // Keep an action in the browser's dialog top layer as well as the fixed app bar.
 for (const dialog of document.querySelectorAll('dialog')) {
   const button = node('button', 'emergency-action dialog-emergency', 'Emergency exit · sign out now');
-  button.type = 'button'; button.title = 'Sign out, lock your account and open mobile.de now. Only the administrator can reactivate it.';
+  button.type = 'button'; button.title = 'Sign out, lock your account and open Temu now. Only the administrator can reactivate it.';
   dialog.prepend(button);
 }
 for (const button of document.querySelectorAll('.emergency-action')) button.onclick = () => {
@@ -421,7 +421,7 @@ for (const button of document.querySelectorAll('.emergency-action')) button.oncl
   try { queued = navigator.sendBeacon('/api/emergency-exit', new Blob(['{}'], { type: 'application/json' })); } catch {}
   if (!queued) fetch('/api/emergency-exit', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: '{}', keepalive: true }).catch(() => {});
   leaveApp(); $('authPage').hidden = true;
-  window.location.replace('https://www.mobile.de/');
+  window.location.replace('https://www.temu.com/');
 };
 for (const b of document.querySelectorAll('.close-dialog')) b.onclick = () => b.closest('dialog').close();
 for (const d of document.querySelectorAll('dialog')) d.addEventListener('click', e => { if (e.target === d) { const r = d.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) d.close(); } });

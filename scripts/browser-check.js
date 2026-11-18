@@ -24,12 +24,12 @@ async function main() {
       chrome.once('exit', code => { clearTimeout(timeout); reject(Error('Chromium exited: ' + code + ' ' + output.slice(-800))); });
     });
     ws = new WebSocket(endpoint); await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
-    let sequence = 0; const pending = new Map(), errors = [], navigationRequests = [];
+    let sequence = 0; const pending = new Map(), errors = [], navigationRequests = [], navigationDispositions = [];
     ws.onmessage = e => {
       const data = JSON.parse(e.data);
       if (data.id) { const request = pending.get(data.id); if (!request) return; pending.delete(data.id); clearTimeout(request.timeout); data.error ? request.reject(Error(JSON.stringify(data.error))) : request.resolve(data.result); }
       if (data.method === 'Runtime.exceptionThrown') errors.push(data.params.exceptionDetails.exception?.description || data.params.exceptionDetails.text);
-      if (data.method === 'Page.frameRequestedNavigation') navigationRequests.push(data.params.url);
+      if (data.method === 'Page.frameRequestedNavigation') { navigationRequests.push(data.params.url); navigationDispositions.push(data.params.disposition); }
     };
     const cdp = (method, params = {}, sessionId) => new Promise((resolve, reject) => { const id = ++sequence, timeout = setTimeout(() => { pending.delete(id); reject(Error('CDP timeout: ' + method)); }, 15000); pending.set(id, { resolve, reject, timeout }); ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) })); });
     const evaluate = async (page, expression) => { const r = await cdp('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true }, page); if (r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; };
@@ -159,12 +159,15 @@ async function main() {
     await wait(alice, `document.getElementById('toastText').textContent === 'This account is locked. Contact the administrator to reactivate it.'`, 'emergency login locks account');
     assert.ok(await evaluate(alice, `document.getElementById('workspace').hidden`), 'Emergency login does not open a session');
     assert.ok(await evaluate(alice, `document.getElementById('emergencyBar').hidden`), 'Emergency action hidden when signed out');
-    // Block external loading while verifying immediate replacement navigation to mobile.de.
-    await cdp('Network.enable', {}, bob); await cdp('Network.setBlockedURLs', { urls: ['*://www.mobile.de/*'] }, bob);
+    // Block external loading while verifying immediate replacement navigation to Temu.
+    const pagesBeforeExit = (await cdp('Target.getTargets')).targetInfos.filter(t => t.type === 'page').length;
+    await cdp('Network.enable', {}, bob); await cdp('Network.setBlockedURLs', { urls: ['*://www.temu.com/*'] }, bob);
     await click(bob, '#backToList'); await click(bob, '#mobileProfile');
     await click(bob, '#profileDialog .dialog-emergency');
-    const exitDeadline = Date.now() + 10000; while (!navigationRequests.includes('https://www.mobile.de/') && Date.now() < exitDeadline) await delay(100);
-    assert.ok(navigationRequests.includes('https://www.mobile.de/'), 'Emergency button immediately redirects to mobile.de');
+    const exitDeadline = Date.now() + 10000; while (!navigationRequests.includes('https://www.temu.com/') && Date.now() < exitDeadline) await delay(100);
+    assert.ok(navigationRequests.includes('https://www.temu.com/'), 'Emergency button immediately redirects to Temu');
+    assert.equal(navigationDispositions[navigationRequests.indexOf('https://www.temu.com/')], 'currentTab', 'Temu opens in the same tab, not a new one');
+    assert.equal((await cdp('Target.getTargets')).targetInfos.filter(t => t.type === 'page').length, pagesBeforeExit, 'No new tab was opened');
     const graceDeadline = Date.now() + 5000; let remaining;
     do { remaining = JSON.parse(await fs.readFile(path.join(temp, 'accounts.json'), 'utf8')).users.find(u => u.username === 'elio_' + suffix); if (remaining?.lockedReason) break; await delay(100); } while (Date.now() < graceDeadline);
     assert.equal(remaining?.lockedReason, 'emergency', 'Navigation keepalive request locked the account');
