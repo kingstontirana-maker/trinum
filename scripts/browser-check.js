@@ -159,6 +159,13 @@ async function main() {
     await wait(alice, `document.getElementById('toastText').textContent === 'This account is locked. Contact the administrator to reactivate it.'`, 'emergency login locks account');
     assert.ok(await evaluate(alice, `document.getElementById('workspace').hidden`), 'Emergency login does not open a session');
     assert.ok(await evaluate(alice, `document.getElementById('emergencyBar').hidden`), 'Emergency action hidden when signed out');
+    // PrintScreen blurs the conversation behind the privacy shield; clicking the shield brings it back.
+    await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: 'PrintScreen', code: 'PrintScreen', windowsVirtualKeyCode: 44 }, bob);
+    await wait(bob, `document.body.classList.contains('shielded') && !document.getElementById('privacyShield').hidden && getComputedStyle(document.getElementById('workspace')).filter.includes('blur')`, 'PrintScreen shows the privacy shield');
+    await screenshot(bob, 'privacy-shield');
+    await evaluate(bob, `document.getElementById('privacyShield').click()`);
+    await wait(bob, `!document.body.classList.contains('shielded')`, 'shield dismissed');
+    assert.equal(await evaluate(bob, `getComputedStyle(document.getElementById('emergencyBar')).filter`), 'none', 'Emergency bar never blurred');
     // Block external loading while verifying immediate replacement navigation to Temu.
     const pagesBeforeExit = (await cdp('Target.getTargets')).targetInfos.filter(t => t.type === 'page').length;
     await cdp('Network.enable', {}, bob); await cdp('Network.setBlockedURLs', { urls: ['*://www.temu.com/*'] }, bob);

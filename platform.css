@@ -81,3 +81,8 @@ body.in-call .toast{z-index:40}
 .call-view{top:calc(42px + env(safe-area-inset-top));padding-top:28px}
 .local-video{top:16px}
 .optional-hint{font-size:.85em;color:var(--muted);font-weight:400;margin-left:4px;text-transform:none;letter-spacing:0}
+/* Screenshot and capture deterrents: blur everything but the emergency bar while the page is hidden, unfocused or a capture key was pressed. */
+.privacy-shield{position:fixed;inset:calc(42px + env(safe-area-inset-top)) 0 0 0;z-index:29;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:24px;text-align:center;background:#050b0bf2;color:#e8f2f1;cursor:pointer;-webkit-user-select:none;user-select:none}.privacy-shield[hidden]{display:none}.privacy-shield svg{width:34px;height:34px;stroke:currentColor;fill:none;stroke-width:1.6;opacity:.8}.privacy-shield strong{font-size:17px}.privacy-shield span{max-width:320px;font-size:13px;opacity:.7}
+body.shielded>:not(.privacy-shield):not(.emergency-bar):not(.svg-defs){filter:blur(28px)}
+.workspace,.call-view{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.workspace :is(input,textarea,[contenteditable]){-webkit-user-select:text;user-select:text}.workspace img,.workspace video,.call-view video{-webkit-user-drag:none;pointer-events:none}
+@media print{body>*{display:none!important}body::after{content:"Printing is disabled in Trinum.";display:block;padding:40px;font:16px sans-serif}}

@@ -75,3 +75,12 @@ Strict networks (some mobile carriers, corporate Wi-Fi) can block direct connect
 ## Offline delivery
 
 Messages and voice messages can be sent at any time. While a direct WebRTC channel is open they travel peer to peer. Otherwise they go through the server: they are held in `mail.json` (next to `accounts.json`) only until the recipient's browser receives and acknowledges them, then deleted. The recipient gets them live if Trinum is open, or the next time they open it. Undelivered messages are readable by the server operator while they wait; they are not end-to-end encrypted. Messages are only accepted between friends.
+
+## Screenshot protection
+
+A web page cannot stop the operating system from taking a screenshot, so Trinum makes captures useless instead. The conversation is blurred behind a "Hidden for privacy" screen when:
+- the page is hidden or loses focus (this also covers the Windows Snipping Tool and phone app-switcher previews);
+- a screenshot shortcut is held (Win+Shift / Cmd+Shift);
+- PrintScreen is pressed (the clipboard is also overwritten).
+
+Printing, saving the page, the context menu, copying messages and dragging images are disabled. The emergency exit bar always stays visible. Screenshots taken with a phone's hardware buttons cannot be detected by a website.

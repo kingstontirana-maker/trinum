@@ -92,14 +92,14 @@ function leaveApp(message) {
   setAuthMode('login'); $('password').value = '';
   $('securityForm').reset(); $('avatarFile').value = '';
   for (const d of document.querySelectorAll('dialog[open]')) d.close();
-  if (message) toast(message);
+  updatePrivacy(); if (message) toast(message);
 }
 function enterApp(data) {
   try { sessionStorage.removeItem('trinum-emergency-signed-out'); } catch {}
   loadIce();
   $('authPage').hidden = true; $('workspace').hidden = false; active = null; view = 'chats';
   $('emergencyBar').hidden = false; updateViewport();
-  applyState(data); showView('chats'); startEvents();
+  applyState(data); showView('chats'); startEvents(); updatePrivacy();
   const s = data.me.subscription;
   if (s.status === 'active' && s.paidUntil && s.paidUntil - Date.now() < 3 * 86400000) toast('Your subscription ends on ' + longDate(s.paidUntil) + '. Contact the administrator to renew.');
 }
@@ -435,3 +435,36 @@ try { emergencySignedOut = sessionStorage.getItem('trinum-emergency-signed-out')
 if (!emergencySignedOut) api('me').then(enterApp).catch(e => { if (e.status !== 401) { $('authError').textContent = e.message; $('authError').hidden = false; } });
 try { const channel = new BroadcastChannel('trinum-session'); channel.onmessage = e => { if (e.data === 'emergency-exit') { try { sessionStorage.setItem('trinum-emergency-signed-out', '1'); } catch {} leaveApp(); } }; } catch {}
 window.addEventListener('pageshow', e => { if (e.persisted) location.reload(); });
+
+// Screenshot deterrents. A web page cannot stop the operating system from taking a screenshot,
+// so the conversation is blurred whenever a capture is likely: page hidden or unfocused,
+// a screenshot shortcut held (Win+Shift / Cmd+Shift), or PrintScreen pressed.
+const privacy = { captureUntil: 0, keys: false, timer: 0 };
+function updatePrivacy() {
+  const on = !!account && (document.hidden || !document.hasFocus() || privacy.keys || Date.now() < privacy.captureUntil);
+  document.body.classList.toggle('shielded', on); $('privacyShield').hidden = !on;
+  clearTimeout(privacy.timer); if (on && privacy.captureUntil > Date.now()) privacy.timer = setTimeout(updatePrivacy, privacy.captureUntil - Date.now() + 20);
+}
+function captureAttempt(ms) {
+  privacy.captureUntil = Date.now() + ms; updatePrivacy();
+  try { navigator.clipboard?.writeText(' ').catch(() => {}); } catch {}
+}
+document.addEventListener('visibilitychange', updatePrivacy);
+window.addEventListener('blur', updatePrivacy); window.addEventListener('focus', updatePrivacy); window.addEventListener('pagehide', updatePrivacy);
+document.addEventListener('keydown', e => {
+  if (!account) return;
+  const k = e.key.toLowerCase();
+  if (e.key === 'PrintScreen') { e.preventDefault(); captureAttempt(4000); return; }
+  if (e.metaKey && e.shiftKey) { privacy.keys = true; updatePrivacy(); }
+  if ((e.ctrlKey || e.metaKey) && (k === 'p' || k === 's')) { e.preventDefault(); toast(k === 'p' ? 'Printing is disabled in Trinum.' : 'Saving the page is disabled in Trinum.'); }
+}, true);
+document.addEventListener('keyup', e => {
+  if (!account) return;
+  if (e.key === 'PrintScreen') { captureAttempt(4000); toast('Screenshots are blocked in Trinum.'); return; }
+  if (privacy.keys && !(e.metaKey && e.shiftKey)) { privacy.keys = false; privacy.captureUntil = Math.max(privacy.captureUntil, Date.now() + 1500); updatePrivacy(); }
+}, true);
+document.addEventListener('contextmenu', e => { if (account && !e.target.closest('input,textarea')) e.preventDefault(); });
+document.addEventListener('copy', e => { if (account && !e.target.closest?.('input,textarea')) e.preventDefault(); });
+document.addEventListener('dragstart', e => { if (account && e.target.closest?.('img,video')) e.preventDefault(); });
+window.addEventListener('beforeprint', () => { if (account) captureAttempt(4000); });
+$('privacyShield').onclick = () => { privacy.captureUntil = 0; privacy.keys = false; window.focus(); updatePrivacy(); };
