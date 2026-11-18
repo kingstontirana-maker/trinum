@@ -148,6 +148,54 @@ async function main() {
     assert.ok(Math.abs(pitches.deep - 220 * 0.88) < 12 && Math.abs(pitches.female - 220 * 1.5) < 15 && Math.abs(pitches.child - 220 * 1.8) < 20, 'Pitch shifter output: ' + JSON.stringify(pitches));
     await screenshot(bob, 'call-voice-child');
     await evaluate(bob, `TrinumVoiceFx.set('normal')`);
+    // Face filter: the detector loads under the CSP; with Mask or Blur only the filtered canvas is
+    // sent; with no face in view (the fake camera has none) the whole picture is hidden.
+    assert.ok(await evaluate(bob, `TrinumVideoFx.load().then(d => !!d)`), 'Face detector loads from Trinum itself');
+    assert.ok(await evaluate(bob, `calls.call.pc.getSenders().find(s => s.track && s.track.kind === 'video').track === calls.call.raw`), 'Normal sends the camera');
+    await click(bob, '#callFace'); await click(bob, '#callFace');
+    await wait(bob, `TrinumVideoFx.current === 'blur' && !!calls.call.pipe && calls.call.pc.getSenders().find(s => s.track && s.track.kind === 'video').track === calls.call.pipe.track`, 'Blur face sends only the filtered track');
+    assert.ok(await evaluate(bob, `(async () => {
+      const c = document.createElement('canvas'); c.width = 640; c.height = 480; const g = c.getContext('2d'); g.fillStyle = '#7a8a90'; g.fillRect(0, 0, 640, 480);
+      const keep = setInterval(() => g.fillRect(0, 0, 640, 480), 66), feed = c.captureStream(15), pipe = TrinumVideoFx.create(feed.getVideoTracks()[0]);
+      await new Promise(r => setTimeout(r, 1500)); const ok = pipe.state.covered === 'all' && pipe.canvas.width === 640;
+      pipe.destroy(); clearInterval(keep); feed.getTracks().forEach(t => t.stop()); return ok; })()`), 'No face in view: the whole picture is hidden');
+    await click(bob, '#callFace'); await click(bob, '#callFace');
+    await wait(bob, `TrinumVideoFx.current === 'mask' && !!calls.call.pipe && calls.call.pc.getSenders().find(s => s.track && s.track.kind === 'video').track === calls.call.pipe.track && calls.call.pipe.track.readyState === 'live'`, 'Mask mode sends the live filtered track');
+    // Rapid taps must still end with the filtered track on the call.
+    for (let i = 0; i < 7; i++) await evaluate(bob, `TrinumVideoFx.next()`);
+    await evaluate(bob, `TrinumVideoFx.set('mask')`); await delay(600);
+    assert.ok(await evaluate(bob, `calls.faceQueue.then(() => !!calls.call.pipe && calls.call.pc.getSenders().find(s => s.track && s.track.kind === 'video').track === calls.call.pipe.track && calls.call.pipe.track.readyState === 'live')`), 'After rapid taps the camera is still hidden');
+    await wait(alice, `document.getElementById('callView').classList.contains('remote-on')`, 'remote video back after switching to Mask'); await delay(1500); await screenshot(alice, 'call-face-mask-remote');
+    if (process.env.TRINUM_FACE_IMAGE) {
+      // A real portrait: the face must be found and its area left with no detail.
+      const photo = 'data:image/jpeg;base64,' + (await fs.readFile(process.env.TRINUM_FACE_IMAGE)).toString('base64');
+      const detail = await evaluate(bob, `(async () => {
+        const img = new Image(); img.src = ${JSON.stringify(photo)}; await img.decode();
+        const src = document.createElement('canvas'); src.width = img.width; src.height = img.height; const sctx = src.getContext('2d'); sctx.drawImage(img, 0, 0);
+        const feed = src.captureStream(15), keep = setInterval(() => sctx.drawImage(img, 0, 0), 66);
+        const results = {};
+        for (const mode of ['blur', 'mask']) {
+          TrinumVideoFx.set(mode); const pipe = TrinumVideoFx.create(feed.getVideoTracks()[0]); const until = Date.now() + 15000;
+          while (pipe.state.covered !== 'face' && Date.now() < until) await new Promise(r => setTimeout(r, 50));
+          await new Promise(r => setTimeout(r, 300));
+          const b = pipe.state.boxes[0], w = pipe.canvas.width, h = pipe.canvas.height;
+          const sharp = c => { const d = c.getContext('2d').getImageData(Math.round(b.originX), Math.round(b.originY), Math.round(b.width), Math.round(b.height)).data, W = Math.round(b.width); let sum = 0, n = 0; for (let i = 4; i < d.length; i += 4) { if ((i / 4) % W === 0) continue; sum += Math.abs(d[i] - d[i - 4]) + Math.abs(d[i + 1] - d[i - 3]) + Math.abs(d[i + 2] - d[i - 2]); n++; } return sum / n; };
+          results[mode] = { covered: pipe.state.covered, faces: pipe.state.faces, before: sharp(src), after: sharp(pipe.canvas), box: [b.originX, b.originY, b.width, b.height].map(Math.round), size: [w, h] };
+          if (mode === 'mask') { const shot = document.createElement('canvas'); shot.width = 320; shot.height = 400; shot.getContext('2d').drawImage(pipe.canvas, 0, 0, 320, 400); results.preview = shot.toDataURL('image/jpeg', 0.8); }
+          else { const shot = document.createElement('canvas'); shot.width = 320; shot.height = 400; shot.getContext('2d').drawImage(pipe.canvas, 0, 0, 320, 400); results.blurPreview = shot.toDataURL('image/jpeg', 0.8); }
+          pipe.destroy();
+        }
+        clearInterval(keep); feed.getTracks().forEach(t => t.stop()); return results; })()`);
+      await fs.writeFile(path.join(artifacts, 'face-mask.jpg'), Buffer.from(detail.preview.split(',')[1], 'base64'));
+      await fs.writeFile(path.join(artifacts, 'face-blur.jpg'), Buffer.from(detail.blurPreview.split(',')[1], 'base64'));
+      console.log('face filter', JSON.stringify({ blur: detail.blur, mask: detail.mask }));
+      for (const mode of ['blur', 'mask']) {
+        assert.equal(detail[mode].covered, 'face', mode + ': face found in the portrait');
+        assert.ok(detail[mode].after < detail[mode].before * (mode === 'mask' ? 0.4 : 0.2), mode + ': no detail left in the face area ' + JSON.stringify(detail[mode]));
+      }
+    }
+    await evaluate(bob, `TrinumVideoFx.set('normal')`);
+    await wait(bob, `!calls.call.pipe && calls.call.pc.getSenders().find(s => s.track && s.track.kind === 'video').track === calls.call.raw`, 'Back to Normal sends the camera again');
     await click(bob, '#callMute'); assert.ok(await evaluate(bob, `calls.call.local.getAudioTracks()[0].enabled === false && document.getElementById('callMute').classList.contains('off')`), 'Mute disables the microphone');
     await delay(1200); await screenshot(bob, 'call-video-mobile'); await size(bob, 1440, 1000); await screenshot(bob, 'call-video-desktop'); await size(bob, 390);
     await click(alice, '#callEnd');

@@ -13,6 +13,33 @@ class TrinumCalls {
     $('callVoice').onclick = () => { if (!window.TrinumVoiceFx) return; TrinumVoiceFx.next(); this.toast('Your voice: ' + TrinumVoiceFx.label); };
     $('callCamera').onclick = () => this.toggle('video');
     $('callFlip').onclick = () => this.flip().catch(() => this.toast('Could not switch the camera.'));
+    $('callFace').onclick = () => { if (!window.TrinumVideoFx) return; TrinumVideoFx.next(); this.toast('Your face: ' + TrinumVideoFx.label); };
+    window.TrinumVideoFx?.onChange(() => this.faceMode().catch(() => this.toast('Could not change the face filter.')));
+  }
+  // Mask or Blur: the call gets only the filtered canvas track, never the camera itself.
+  face(call) {
+    const raw = call.local?.getVideoTracks()[0]; if (!raw) return;
+    call.raw = raw;
+    if (window.TrinumVideoFx && TrinumVideoFx.current !== 'normal') {
+      if (!TrinumVideoFx.supported) { raw.stop(); call.local.removeTrack(raw); call.raw = null; this.toast('This browser cannot hide your face, so the camera stays off.'); return; }
+      call.pipe = TrinumVideoFx.create(raw); call.local.removeTrack(raw); call.local.addTrack(call.pipe.track);
+    }
+  }
+  async swapVideo(call, from, to) {
+    to.enabled = !call.cameraOff;
+    const sender = call.pc?.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) await sender.replaceTrack(to);
+    call.local.removeTrack(from); call.local.addTrack(to);
+    const local = this.$('localVideo'); local.srcObject = null; this.show();
+  }
+  // Mode changes run one at a time, so quick taps can never leave the camera on the call.
+  faceMode() { return this.faceQueue = (this.faceQueue || Promise.resolve()).catch(() => {}).then(() => this.applyFace()); }
+  async applyFace() {
+    const call = this.call; if (!call?.raw) return;
+    const want = TrinumVideoFx.current !== 'normal';
+    if (want && !call.pipe) { const pipe = TrinumVideoFx.create(call.raw); call.pipe = pipe; await this.swapVideo(call, call.raw, pipe.track); }
+    else if (!want && call.pipe) { const pipe = call.pipe; call.pipe = null; await this.swapVideo(call, pipe.track, call.raw); pipe.destroy(); }
+    this.show();
   }
   get busy() { return !!this.call; }
   send(peer, message) { return this.api('signal', { to: peer, signal: { call: message } }); }
@@ -38,6 +65,7 @@ class TrinumCalls {
     try {
       call.local = await this.media(video);
       if (this.call !== call) { call.local.getTracks().forEach(t => t.stop()); return; }
+      this.face(call);
       call.video = call.local.getVideoTracks().length > 0; this.show();
       await this.send(peer, { type: 'invite', id, video: call.video });
       if (this.call !== call) return;
@@ -119,7 +147,7 @@ class TrinumCalls {
     try { call.local = await this.media(call.video); }
     catch (e) { if (this.call === call) { this.send(call.peer, { type: 'decline', id: call.id }).catch(() => {}); this.finish(e.message); } return; }
     if (this.call !== call) { call.local.getTracks().forEach(t => t.stop()); return; }
-    this.show(); this.connection(call);
+    this.face(call); this.show(); this.connection(call);
     await this.send(call.peer, { type: 'accept', id: call.id });
   }
   hangup() {
@@ -132,7 +160,7 @@ class TrinumCalls {
   finish(message, note) {
     const call = this.call; if (!call) return; this.call = null;
     clearTimeout(call.timer); clearTimeout(call.lost); clearInterval(call.clock); this.tone(null); try { navigator.vibrate?.(0); } catch {}
-    call.local?.getTracks().forEach(t => t.stop()); try { call.pc?.close(); } catch {}
+    call.local?.getTracks().forEach(t => t.stop()); call.pipe?.destroy(); call.raw?.stop(); try { call.pc?.close(); } catch {}
     this.$('remoteVideo').srcObject = null; this.$('localVideo').srcObject = null;
     const kind = call.video ? 'Video call' : 'Voice call';
     if (note === undefined && call.startedAt) note = kind + ' · ' + TrinumCalls.duration(Date.now() - call.startedAt);
@@ -149,13 +177,12 @@ class TrinumCalls {
     this.show();
   }
   async flip() {
-    const call = this.call, old = call?.local?.getVideoTracks()[0]; if (!old) return;
+    const call = this.call, old = call?.raw; if (!old) return;
     const facing = call.facing === 'user' ? 'environment' : 'user';
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: facing }, width: { ideal: 1280 }, height: { ideal: 720 } } });
     const track = stream.getVideoTracks()[0]; if (this.call !== call) { track.stop(); return; }
-    track.enabled = !call.cameraOff;
-    await call.pc?.getSenders().find(s => s.track === old)?.replaceTrack(track);
-    call.local.removeTrack(old); old.stop(); call.local.addTrack(track); call.facing = facing; this.show();
+    if (call.pipe) call.pipe.setSource(track); else await this.swapVideo(call, old, track);
+    call.raw = track; old.stop(); call.facing = facing; this.show();
   }
 
   static duration(ms) { const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, r = String(s % 60).padStart(2, '0'); return h ? h + ':' + String(m).padStart(2, '0') + ':' + r : m + ':' + r; }
@@ -198,6 +225,7 @@ class TrinumCalls {
     $('callMute').classList.toggle('off', !!call.muted); $('callMute').setAttribute('aria-pressed', String(!!call.muted)); $('callMute').title = call.muted ? 'Unmute' : 'Mute';
     $('callCamera').hidden = !hasLocalVideo; $('callCamera').classList.toggle('off', !!call.cameraOff); $('callCamera').title = call.cameraOff ? 'Turn camera on' : 'Turn camera off';
     $('callFlip').hidden = !hasLocalVideo || !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+    $('callFace').hidden = !call.raw || !window.TrinumVideoFx; $('callFaceLabel').textContent = window.TrinumVideoFx?.label || 'Normal'; $('callFace').classList.toggle('changed', !!call.pipe);
   }
 }
 if (typeof module !== 'undefined') module.exports = { TrinumCalls };

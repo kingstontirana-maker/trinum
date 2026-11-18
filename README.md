@@ -88,3 +88,12 @@ Printing, saving the page, the context menu, copying messages and dragging image
 ## Voice changer
 
 In the profile ("Your voice in calls and voice messages") or with the voice button during a call, each user picks Normal, Deep, Female or Child. The microphone runs through a real-time pitch shifter (`voice-fx.js`, an AudioWorklet; all voices use pitch-synchronous overlap-add, so they sound natural, without a sped-up or metallic sound) before it reaches the call or a voice message, so the other person only hears the changed voice. The choice is remembered on that device; "Test my voice" records three seconds and plays them back.
+
+## Face privacy in video calls
+
+In the profile ("Your face in video calls") or with the face button during a call, each user picks Normal, Mask or Blur face.
+
+- With Mask or Blur face, the camera is never sent directly: each frame is drawn on a canvas, the face is found with MediaPipe's face detector (BlazeFace short range) and covered before the frame leaves the device. Your own preview shows exactly what the other person sees.
+- It fails closed: until the detector has loaded, and whenever no face is found for 300 ms, the whole picture is pixelated.
+- The detector is served by Trinum itself from `vendor/mediapipe`, downloaded at build time by `scripts/fetch-vendor.js` with pinned SHA-256 checksums (run it once locally before `npm start`). The CSP allows `'wasm-unsafe-eval'` for it.
+- The short-range model works best within about 2 metres of the camera. A face that is far away or mostly turned away may not be found; if no other face is found, the whole picture is hidden.

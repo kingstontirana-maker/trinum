@@ -96,7 +96,7 @@ function leaveApp(message) {
 }
 function enterApp(data) {
   try { sessionStorage.removeItem('trinum-emergency-signed-out'); } catch {}
-  loadIce();
+  loadIce(); if (window.TrinumVideoFx && TrinumVideoFx.current !== 'normal') TrinumVideoFx.load();
   $('authPage').hidden = true; $('workspace').hidden = false; active = null; view = 'chats';
   $('emergencyBar').hidden = false; updateViewport();
   applyState(data); showView('chats'); startEvents(); updatePrivacy();
@@ -494,3 +494,11 @@ $('voiceTest').onclick = async () => {
   } catch (e) { toast(e?.name === 'NotAllowedError' ? 'Allow microphone access to test your voice.' : 'Could not test your voice.'); }
   finally { stream?.getTracks().forEach(t => t.stop()); button.disabled = false; button.textContent = 'Test my voice'; }
 };
+
+// Face filter picker (profile) for video calls.
+function renderFace() {
+  const fx = window.TrinumVideoFx; if (!fx) return;
+  for (const b of document.querySelectorAll('[data-face]')) { const on = b.dataset.face === fx.current; b.classList.toggle('active', on); b.setAttribute('aria-checked', String(on)); }
+}
+for (const b of document.querySelectorAll('[data-face]')) b.onclick = () => window.TrinumVideoFx?.set(b.dataset.face);
+window.TrinumVideoFx?.onChange(renderFace); renderFace();

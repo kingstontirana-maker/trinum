@@ -3,4 +3,6 @@
 .artifacts
 node_modules
 *.test.js
-scripts
+scripts/*
+!scripts/fetch-vendor.js
+vendor
