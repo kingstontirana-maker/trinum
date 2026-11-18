@@ -93,7 +93,7 @@ In the profile ("Your voice in calls and voice messages") or with the voice butt
 
 In the profile ("Your face in video calls") or with the face button during a call, each user picks Normal, Mask or Blur face.
 
-- Mask puts the Anonymous mask (`assets/mask-anonymous.webp`, supplied by the owner) on the face inside a dark hood; it sits on the detected eyes and tilts with the head. The white around the image is removed and everything inside it is made opaque.
+- Mask puts the Anonymous mask (`assets/mask-anonymous.webp`, supplied by the owner) over the whole face; it sits on the detected eyes, tilts with the head and is scaled to reach past the forehead, chin and cheeks. The white around the image is removed and everything inside it is made opaque.
 - With Mask or Blur face, the camera is never sent directly: each frame is drawn on a canvas, the face is found with MediaPipe's face detector (BlazeFace short range) and covered before the frame leaves the device. Your own preview shows exactly what the other person sees.
 - It fails closed: until the detector has loaded, and whenever no face is found for 300 ms, the whole picture is pixelated.
 - The detector is served by Trinum itself from `vendor/mediapipe`, downloaded at build time by `scripts/fetch-vendor.js` with pinned SHA-256 checksums (run it once locally before `npm start`). The CSP allows `'wasm-unsafe-eval'` for it.

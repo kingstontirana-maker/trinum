@@ -66,7 +66,7 @@ window.TrinumVideoFx = new class TrinumVideoFx {
         gloss.addColorStop(0, 'rgba(255,255,255,0.55)'); gloss.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gloss; g.fillRect(0, 0, W, H);
         g.globalCompositeOperation = 'source-over';
         // Eye line and distance in the image, used to sit the mask on the detected eyes.
-        this.anonymous = { img: c, ex: W * 0.5, ey: H * 0.345, dist: W * 0.5 }; resolve(this.anonymous);
+        this.anonymous = { img: c, ex: W * 0.5, ey: H * 0.345, dist: W * 0.5, half: 0.42, top: 0.03, bottom: 0.95 }; resolve(this.anonymous);
       };
       img.onerror = () => { this.anonymousLoading = null; resolve(null); };
       img.src = '/assets/mask-anonymous.webp';
@@ -74,7 +74,7 @@ window.TrinumVideoFx = new class TrinumVideoFx {
   }
   maskArt() {
     if (this.maskStyle === 'anonymous') { if (this.anonymous) return this.anonymous; this.loadAnonymous(); }
-    return { img: this.maskImage('porcelain'), ex: 300, ey: 338, dist: 208 };
+    return { img: this.maskImage('porcelain'), ex: 300, ey: 338, dist: 208, half: 0.36, top: 0.04, bottom: 0.95 };
   }
 
   // Original full-face masks, painted once at 600x800 with light from the upper left:
@@ -190,35 +190,25 @@ window.TrinumVideoFx = new class TrinumVideoFx {
       sctx.drawImage(canvas, x, y, w, h, 0, 0, bw, bh);
       ctx.imageSmoothingEnabled = true; ctx.drawImage(small, 0, 0, bw, bh, x, y, w, h);
     };
-    const cover = (box, mode) => {
-      const { x, y, w, h } = box, cx = x + w / 2, cy = y + h / 2;
-      ctx.save(); ctx.beginPath(); ctx.ellipse(cx, cy, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.clip();
+    // Blur face: the enlarged face area is pixelated.
+    const cover = box => {
+      const { x, y, w, h } = box;
+      ctx.save(); ctx.beginPath(); ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2); ctx.clip();
       pixelate(x, y, w, h, 5); ctx.restore();
-      if (mode !== 'mask') return;
-      // A real hood: an arch over the head falling to the shoulders, dark fabric with soft folds.
-      const top = y - h * 0.04, bottom = Math.min(canvas.height + h * 0.2, y + h * 1.02), hw = w * 0.56;
-      ctx.save(); ctx.beginPath();
-      ctx.moveTo(cx - hw * 1.3, bottom - h * 0.06); ctx.bezierCurveTo(cx - hw * 1.12, cy + h * 0.3, cx - hw * 1.02, cy, cx - hw, cy - h * 0.08);
-      ctx.bezierCurveTo(cx - hw * 0.98, top + h * 0.02, cx - hw * 0.5, top - h * 0.08, cx, top - h * 0.14);
-      ctx.bezierCurveTo(cx + hw * 0.5, top - h * 0.08, cx + hw * 0.98, top + h * 0.02, cx + hw, cy - h * 0.08);
-      ctx.bezierCurveTo(cx + hw * 1.02, cy, cx + hw * 1.12, cy + h * 0.3, cx + hw * 1.3, bottom - h * 0.06);
-      ctx.bezierCurveTo(cx + hw * 0.7, bottom + h * 0.08, cx - hw * 0.7, bottom + h * 0.08, cx - hw * 1.3, bottom - h * 0.06); ctx.closePath();
-      const cloth = ctx.createLinearGradient(cx - hw, 0, cx + hw, 0);
-      cloth.addColorStop(0, '#16181d'); cloth.addColorStop(0.18, '#23262d'); cloth.addColorStop(0.35, '#0d0e11'); cloth.addColorStop(0.65, '#0a0b0d'); cloth.addColorStop(0.85, '#15171b'); cloth.addColorStop(1, '#08090b');
-      ctx.fillStyle = cloth; ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = Math.max(10, w * 0.06); ctx.fill(); ctx.shadowBlur = 0;
-      // The opening of the hood falls into deep shadow around the face.
-      const inside = ctx.createRadialGradient(cx, cy + h * 0.02, w * 0.05, cx, cy + h * 0.02, w * 0.5);
-      inside.addColorStop(0, '#020203'); inside.addColorStop(0.75, '#040405'); inside.addColorStop(1, 'rgba(4,4,5,0)');
-      ctx.clip(); ctx.fillStyle = inside; ctx.fillRect(cx - w, cy - h, 2 * w, 2 * h); ctx.restore();
     };
-    // Places the mask so its eyes sit on the detected eyes and it tilts with the head.
-    const placeMask = (fit) => {
-      const art = fx.maskArt(), s = fit.eyes ? fit.eyes / art.dist : fit.width / art.img.width;
-      ctx.save(); ctx.translate(fit.ex, fit.ey); ctx.rotate(fit.roll); ctx.drawImage(art.img, -art.ex * s, -art.ey * s, art.img.width * s, art.img.height * s); ctx.restore();
+    // Mask: sits on the detected eyes, tilts with the head, and is scaled so its opaque area
+    // reaches past the forehead, the chin and both cheeks of the detected face.
+    const placeMask = (fit, grow = 1) => {
+      const art = fx.maskArt(), W = art.img.width, H = art.img.height;
+      let s = fit.scale ? fit.scale / W : fit.width / W;
+      if (!fit.scale && fit.eyes) {
+        s = Math.max(fit.eyes / art.dist, fit.half / (art.half * W), fit.up / (art.ey - art.top * H), fit.down / (art.bottom * H - art.ey)) * 1.06;
+      }
+      s *= grow;
+      ctx.save(); ctx.translate(fit.ex, fit.ey); ctx.rotate(fit.roll); ctx.drawImage(art.img, -art.ex * s, -art.ey * s, W * s, H * s); ctx.restore();
     };
     const fitFor = (d, w, h) => {
       const b = d.boundingBox, k = d.keypoints || [];
-      // eyes: the distance between the eyes the mask is scaled to; at least wide enough to cover the face.
       let ex = b.originX + b.width / 2, ey = b.originY + b.height * 0.36, roll = 0, eyes = b.width * 0.62;
       if (k.length >= 2) {
         let [a, c] = [k[0], k[1]]; if (a.x > c.x) [a, c] = [c, a];
@@ -226,12 +216,15 @@ window.TrinumVideoFx = new class TrinumVideoFx {
         ex = (ax + cx2) / 2; ey = (ay + cy2) / 2; roll = Math.max(-0.6, Math.min(0.6, Math.atan2(cy2 - ay, cx2 - ax)));
         eyes = Math.max(eyes, dist * 1.05);
       }
-      return { ex, ey, roll, eyes };
+      // How far the mask must reach from the eye line: forehead above, chin below, cheeks aside.
+      const tilt = 1 + Math.abs(roll) * 0.6;
+      const up = (ey - (b.originY - b.height * 0.3)) * tilt, down = (b.originY + b.height * 1.1 - ey) * tilt, half = (b.width * 0.6 + Math.abs(ex - (b.originX + b.width / 2))) * tilt;
+      return { ex, ey, roll, eyes, up, down, half };
     };
     const coverAll = (w, h, mode) => {
       pixelate(0, 0, w, h, 14);
-      ctx.fillStyle = mode === 'mask' ? 'rgba(5,6,8,0.88)' : '#050b0b99'; ctx.fillRect(0, 0, w, h);
-      if (mode === 'mask') placeMask({ ex: w / 2, ey: h * 0.4, roll: 0, width: Math.min(w, h) * 0.42 });
+      if (mode === 'mask') placeMask({ ex: w / 2, ey: h * 0.4, roll: 0, width: Math.min(w, h) * 0.5 });
+      else { ctx.fillStyle = '#050b0b99'; ctx.fillRect(0, 0, w, h); }
     };
     // Face box from the detector, enlarged to include hair, ears, chin and some movement.
     const grow = (b, w, h, extra) => {
@@ -257,15 +250,17 @@ window.TrinumVideoFx = new class TrinumVideoFx {
       if (found && found.length) {
         // Smooth the mask's position between frames so it moves like a real one.
         const fits = found.map(d => fitFor(d, w, h)), prev = state.fits || [];
-        state.fits = fits.map((f, i) => { const p = prev[i]; if (!p || Math.hypot(p.ex - f.ex, p.ey - f.ey) > f.eyes) return f; const m = (a, b) => a + (b - a) * 0.55; return { ex: m(p.ex, f.ex), ey: m(p.ey, f.ey), roll: m(p.roll, f.roll), eyes: m(p.eyes, f.eyes) }; });
+        state.fits = fits.map((f, i) => { const p = prev[i]; if (!p || Math.hypot(p.ex - f.ex, p.ey - f.ey) > f.eyes) return f; const m = (a, b) => a + (b - a) * 0.55; return { ex: m(p.ex, f.ex), ey: m(p.ey, f.ey), roll: m(p.roll, f.roll), eyes: Math.max(m(p.eyes, f.eyes), f.eyes * 0.97), up: Math.max(m(p.up, f.up), f.up), down: Math.max(m(p.down, f.down), f.down), half: Math.max(m(p.half, f.half), f.half) }; });
         state.boxes = found.map(d => d.boundingBox); state.seen = now;
       }
       state.faces = found ? found.length : 0;
       const age = now - state.seen;
       if (state.boxes.length && age < 300) {
         // A face lost for a moment keeps its (wider) cover; after 300 ms the whole frame is hidden.
-        for (const b of state.boxes) cover(grow(b, w, h, found && found.length ? 1 : 1.35), mode);
-        if (mode === 'mask') for (const f of state.fits || []) placeMask(f);
+        // A face lost for a moment keeps a slightly larger cover.
+        const fresh = found && found.length;
+        if (mode === 'mask') for (const f of state.fits || []) placeMask(f, fresh ? 1 : 1.15);
+        else for (const b of state.boxes) cover(grow(b, w, h, fresh ? 1 : 1.35));
         state.covered = 'face';
       } else { coverAll(w, h, mode); state.covered = 'all'; }
     };
